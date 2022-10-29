@@ -221,3 +221,4 @@ logs.*
 _version.py
 
 data/
+*.h5
