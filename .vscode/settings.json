@@ -1,0 +1,20 @@
+{
+    "debug.internalConsoleOptions": "neverOpen",
+    "python.formatting.provider": "yapf",
+    "autoDocstring.includeExtendedSummary": true,
+    "autoDocstring.includeName": true,
+    "autoDocstring.startOnNewLine": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintPath": "pylint",
+    "editor.formatOnSave": true,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.cwd": "./",
+    "python.testing.unittestArgs": [
+        "*test*.py"
+    ],
+    "autoDocstring.docstringFormat": "numpy",
+}

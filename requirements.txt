@@ -1,0 +1,9 @@
+matplotlib
+numpy
+mat73
+h5py
+psutil
+scipy
+tensorflow
+scikit-learn
+tqdm
