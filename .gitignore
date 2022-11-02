@@ -221,4 +221,8 @@ logs.*
 _version.py
 
 data/
+mlruns/
 *.h5
+mlflow.db
+optuna.db
+hpo_output.txt
