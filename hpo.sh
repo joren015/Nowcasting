@@ -1,3 +1,9 @@
+echo "### Installing dependencies ###"
 
-jupyter nbconvert --ExecutePreprocessor.timeout=43200 --to notebook --execute notebooks/hpo.ipynb > hpo_output.txt 2>&1
+pip install -r requirements_dev.txt
+pip install -r requirements.txt
+pip install .
 
+echo "### Starting script ###"
+
+python hpo.py
