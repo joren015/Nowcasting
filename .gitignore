@@ -225,4 +225,4 @@ mlruns/
 *.h5
 mlflow.db
 optuna.db
-hpo_output.txt
+slurm-*.out
