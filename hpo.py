@@ -19,9 +19,9 @@ from nowcasting.unet import res1
 def objective(trial):
     time.sleep(5)
     num_filters_base = trial.suggest_int("num_filters_base", 4, 12, step=4)
-    dropout_rate = trial.suggest_float("dropout_rate", 0.1, 0.3, step=0.1)
-    learning_rate = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
-    batch_size = trial.suggest_int("batch_size", 4, 12, step=4)
+    dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5, step=0.05)
+    learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-3, log=True)
+    batch_size = trial.suggest_int("batch_size", 4, 24, step=4)
 
     mlflow.tensorflow.autolog(log_models=False)
 
@@ -48,10 +48,7 @@ def objective(trial):
         checkpoint_filepath = "script_n1.h5"
         callbacks = [
             EarlyStopping(patience=10, verbose=1),
-            ReduceLROnPlateau(factor=0.1,
-                              patience=5,
-                              min_lr=0.00001,
-                              verbose=1),
+            ReduceLROnPlateau(factor=0.1, patience=5, min_lr=1e-15, verbose=1),
             ModelCheckpoint(filepath=checkpoint_filepath,
                             verbose=1,
                             save_best_only=True,
@@ -111,16 +108,16 @@ if __name__ == "__main__":
                                          heartbeat_interval=60,
                                          grace_period=120)
 
-    search_space = {
-        "num_filters_base": [4, 8, 12],
-        "dropout_rate": [0.1, 0.2, 0.3],
-        "learning_rate": [1e-4, 1e-3, 1e-2],
-        "batch_size": [4, 8, 12]
-    }
-    study = optuna.create_study(
-        storage=storage,
-        sampler=optuna.samplers.GridSampler(search_space),
-        direction="minimize",
-        load_if_exists=True)
+    # search_space = {
+    #     "num_filters_base": [4, 8, 12],
+    #     "dropout_rate": [0.1, 0.2, 0.3],
+    #     "learning_rate": [1e-4, 1e-3, 1e-2],
+    #     "batch_size": [4, 8, 12]
+    # }
+    study = optuna.create_study(study_name="res1_mini",
+                                storage=storage,
+                                sampler=optuna.samplers.TPESampler(),
+                                direction="minimize",
+                                load_if_exists=True)
 
-    study.optimize(objective)
+    study.optimize(objective, n_trials=30)
