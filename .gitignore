@@ -226,4 +226,3 @@ mlruns/
 mlflow.db
 optuna.db
 slurm-*.out
-gpu_stats_*.csv
