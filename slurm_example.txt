@@ -1,10 +1,10 @@
 #!/bin/bash -l
-#SBATCH --time=10:00:00
-#SBATCH --ntasks=64
+#SBATCH --time=23:00:00
+#SBATCH --ntasks=128
 #SBATCH --nodes=1
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=joren015@umn.edu
-#SBATCH -p a100-4
+#SBATCH -p a100-8
 #SBATCH --gres=gpu:a100:1
 
 cd /panfs/jay/groups/6/csci8523/joren015/repos/Nowcasting
