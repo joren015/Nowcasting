@@ -48,7 +48,7 @@ def objective(trial):
         checkpoint_filepath = "script_n1.h5"
         callbacks = [
             EarlyStopping(patience=10, verbose=1),
-            ReduceLROnPlateau(factor=0.1, patience=5, min_lr=1e-15, verbose=1),
+            ReduceLROnPlateau(factor=0.1, patience=5, min_lr=1e-16, verbose=1),
             ModelCheckpoint(filepath=checkpoint_filepath,
                             verbose=1,
                             save_best_only=True,
@@ -85,7 +85,9 @@ if __name__ == "__main__":
 
     print(tf.config.list_physical_devices('GPU'))
 
-    mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
+    # mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
+    mat = mat73.loadmat(
+        "/home/csci8523/rahim035/GFS_IMERG_0.25Res_12Months_v2.mat")
     X_1 = mat[
         "X_train"]  # (sample, time sequence, latitude, longitude, channel) here channels are 1: precipitation, 2: wind velocity in x direction, 3: wind velocity in y direction
     y_1 = mat["y_train"]  # (sample, time sequence, lat, lon)
@@ -114,7 +116,7 @@ if __name__ == "__main__":
     #     "learning_rate": [1e-4, 1e-3, 1e-2],
     #     "batch_size": [4, 8, 12]
     # }
-    study = optuna.create_study(study_name="res1_mini",
+    study = optuna.create_study(study_name="res1",
                                 storage=storage,
                                 sampler=optuna.samplers.TPESampler(),
                                 direction="minimize",
