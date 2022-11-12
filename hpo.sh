@@ -6,7 +6,7 @@ pip install .
 
 echo "### Writing RAM and GPU info"
 nvidia-smi
-free -s 1 -h
+free -h
 
 echo "### Starting GPU monitor ###"
 ts=$(date +%s)

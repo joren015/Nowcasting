@@ -85,9 +85,9 @@ if __name__ == "__main__":
 
     print(tf.config.list_physical_devices('GPU'))
 
-    # mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
-    mat = mat73.loadmat(
-        "/home/csci8523/rahim035/GFS_IMERG_0.25Res_12Months_v2.mat")
+    mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
+    # mat = mat73.loadmat(
+    #     "/home/csci8523/rahim035/GFS_IMERG_0.25Res_12Months_v2.mat")
     X_1 = mat[
         "X_train"]  # (sample, time sequence, latitude, longitude, channel) here channels are 1: precipitation, 2: wind velocity in x direction, 3: wind velocity in y direction
     y_1 = mat["y_train"]  # (sample, time sequence, lat, lon)
