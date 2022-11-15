@@ -9,7 +9,6 @@ import numpy as np
 import optuna
 import tensorflow as tf
 from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
-from sklearn.model_selection import train_test_split
 from tensorflow.keras import mixed_precision
 from tqdm import tqdm
 
@@ -18,7 +17,7 @@ from nowcasting.unet import res1
 
 def objective(trial):
     time.sleep(5)
-    num_filters_base = trial.suggest_int("num_filters_base", 4, 12, step=4)
+    num_filters_base = trial.suggest_int("num_filters_base", 4, 8, step=2)
     dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-3, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 24, step=4)
@@ -62,16 +61,15 @@ def objective(trial):
                                 epochs=128,
                                 callbacks=callbacks,
                                 verbose=1,
-                                validation_data=(X_test, y_test))
+                                validation_data=(X_val, y_val))
 
             val_loss = np.min(results.history["val_loss"])
+            return val_loss
         except Exception as e:
             print(e)
 
         del model
         gc.collect()
-
-        return val_loss
 
 
 if __name__ == "__main__":
@@ -86,24 +84,21 @@ if __name__ == "__main__":
     print(tf.config.list_physical_devices('GPU'))
 
     mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
-    # mat = mat73.loadmat(
-    #     "/home/csci8523/rahim035/GFS_IMERG_0.25Res_12Months_v2.mat")
+
     X_1 = mat[
         "X_train"]  # (sample, time sequence, latitude, longitude, channel) here channels are 1: precipitation, 2: wind velocity in x direction, 3: wind velocity in y direction
     y_1 = mat["y_train"]  # (sample, time sequence, lat, lon)
 
-    X_test = mat["X_test"]
-    y_test = mat["y_test"]
-    GFS = mat["GFS_test"]
+    train_cutoff = int(X_1.shape[0] * 0.9)
+    X_train = X_1[:train_cutoff]
+    y_train = y_1[:train_cutoff]
+    X_val = X_1[train_cutoff:]
+    y_val = y_1[train_cutoff:]
 
-    X_train, X_val, y_train, y_val = train_test_split(X_1,
-                                                      y_1,
-                                                      test_size=0.15,
-                                                      random_state=42)
     print("Train feature", X_train.shape, "Train label", y_train.shape)
-    print("Validation feature", X_test.shape, "Validation label", y_val.shape)
+    print("Validation feature", X_val.shape, "Validation label", y_val.shape)
 
-    del X_1, y_1, mat, X_val, y_val, GFS
+    del X_1, y_1, mat
     gc.collect()
 
     storage = optuna.storages.RDBStorage(url="sqlite:///optuna.db",
