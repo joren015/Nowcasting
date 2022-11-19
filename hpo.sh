@@ -2,6 +2,7 @@ echo "### Installing dependencies ###"
 
 pip install -r requirements_dev.txt
 pip install -r requirements.txt
+pip install --upgrade scipy
 pip install .
 
 echo "### Writing RAM and GPU info"
