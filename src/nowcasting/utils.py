@@ -1,5 +1,7 @@
-import numpy as np
 from typing import Tuple
+
+import keras
+import numpy as np
 
 
 def sliding_window_expansion(
@@ -52,3 +54,29 @@ def sliding_window_expansion(
     y_new = y[y_idx]
 
     return X_new, y_new
+
+
+class CustomGenerator(keras.utils.Sequence):
+
+    def __init__(self, input_paths, batch_size):
+        self.input_paths = input_paths
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return len(self.input_paths) // int(self.batch_size)
+
+    def __getitem__(self, idx):
+        batch_x = self.input_paths[idx * self.batch_size:(idx + 1) *
+                                   self.batch_size]
+
+        X = []
+        y = []
+        for i in range(self.batch_size):
+            arr = np.load(batch_x[i], allow_pickle=True)
+            X.append(arr[0])
+            y.append(arr[1])
+
+        X = np.array(X)
+        y = np.array(y)
+
+        return X, y

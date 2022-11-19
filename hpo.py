@@ -2,9 +2,9 @@ import gc
 import os
 import re
 import time
+from shutil import rmtree
 
 import keras
-import mat73
 import mlflow
 import numpy as np
 import optuna
@@ -15,7 +15,10 @@ from tensorflow.keras import mixed_precision
 from tqdm import tqdm
 
 from nowcasting.unet import res1, res2
-from nowcasting.utils import sliding_window_expansion
+from nowcasting.utils import CustomGenerator, sliding_window_expansion
+
+train_directory = "data/train"
+val_directory = "data/val"
 
 
 def objective(trial):
@@ -23,7 +26,15 @@ def objective(trial):
     num_filters_base = trial.suggest_int("num_filters_base", 4, 8, step=2)
     dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-3, log=True)
-    batch_size = trial.suggest_int("batch_size", 4, 24, step=4)
+    batch_size = trial.suggest_int("batch_size", 2, 8, step=2)
+
+    train_paths = [
+        f"{train_directory}/{x}" for x in os.listdir(train_directory)
+    ]
+    val_paths = [f"{val_directory}/{x}" for x in os.listdir(val_directory)]
+
+    train_dataset = CustomGenerator(train_paths, batch_size)
+    val_dataset = CustomGenerator(val_paths, batch_size)
 
     mlflow.tensorflow.autolog(log_models=False)
 
@@ -41,6 +52,7 @@ def objective(trial):
         model = res2((12, 256, 620, 3),
                      num_filters_base=num_filters_base,
                      dropout_rate=dropout_rate)
+        model.summary()
 
         model.compile(
             loss="mean_absolute_error",
@@ -58,13 +70,12 @@ def objective(trial):
         ]
 
         try:
-            results = model.fit(X_train,
-                                y_train,
+            results = model.fit(train_dataset,
                                 batch_size=batch_size,
                                 epochs=128,
                                 callbacks=callbacks,
                                 verbose=1,
-                                validation_data=(X_val, y_val))
+                                validation_data=val_dataset)
 
             val_loss = np.min(results.history["val_loss"])
             return val_loss
@@ -84,18 +95,16 @@ if __name__ == "__main__":
     policy = mixed_precision.Policy("mixed_float16")
     mixed_precision.set_global_policy(policy)
 
-    print(tf.config.list_physical_devices('GPU'))
+    gpus = tf.config.experimental.list_physical_devices(device_type="GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
 
-    # mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
-
-    # X_1 = mat[
-    #     "X_train"]  # (sample, time sequence, latitude, longitude, channel) here channels are 1: precipitation, 2: wind velocity in x direction, 3: wind velocity in y direction
-    # y_1 = mat["y_train"]  # (sample, time sequence, lat, lon)
+    print(tf.config.list_physical_devices("GPU"))
 
     mat_path = "/panfs/jay/groups/6/csci8523/rahim035"
     mat_files = [
         f"{mat_path}/{x}" for x in os.listdir(mat_path)
-        if re.match(r'20.*-S.*\.mat', x)
+        if re.match(r"20.*-S.*\.mat", x)
     ]
     mat_files.sort()
 
@@ -131,19 +140,30 @@ if __name__ == "__main__":
     print("Train feature", X_train.shape, "Train label", y_train.shape)
     print("Validation feature", X_val.shape, "Validation label", y_val.shape)
 
-    del Xs, ys, mat
+    try:
+        rmtree(train_directory)
+        rmtree(val_directory)
+    except Exception as e:
+        print(e)
+
+    os.makedirs(train_directory)
+    os.makedirs(val_directory)
+
+    for i in tqdm(range(X_train.shape[0])):
+        arr = np.array([X_train[i], y_train[i]], dtype=object)
+        np.save(f"{train_directory}/{i}.npy", arr)
+
+    for i in tqdm(range(X_val.shape[0])):
+        arr = np.array([X_val[i], X_val[i]], dtype=object)
+        np.save(f"{val_directory}/{i}.npy", arr)
+
+    del X_train, y_train, X_val, y_val, X, y, Xs, ys, mat, arr
     gc.collect()
 
     storage = optuna.storages.RDBStorage(url="sqlite:///optuna.db",
                                          heartbeat_interval=60,
                                          grace_period=120)
 
-    # search_space = {
-    #     "num_filters_base": [4, 8, 12],
-    #     "dropout_rate": [0.1, 0.2, 0.3],
-    #     "learning_rate": [1e-4, 1e-3, 1e-2],
-    #     "batch_size": [4, 8, 12]
-    # }
     study = optuna.create_study(study_name="res2",
                                 storage=storage,
                                 sampler=optuna.samplers.TPESampler(),
