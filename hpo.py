@@ -1,5 +1,6 @@
 import gc
 import os
+import re
 import time
 
 import keras
@@ -7,12 +8,14 @@ import mat73
 import mlflow
 import numpy as np
 import optuna
+import scipy
 import tensorflow as tf
 from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 from tqdm import tqdm
 
-from nowcasting.unet import res1
+from nowcasting.unet import res1, res2
+from nowcasting.utils import sliding_window_expansion
 
 
 def objective(trial):
@@ -35,7 +38,7 @@ def objective(trial):
         except Exception as e:
             print(e)
 
-        model = res1((12, 120, 120, 3),
+        model = res2((12, 256, 620, 3),
                      num_filters_base=num_filters_base,
                      dropout_rate=dropout_rate)
 
@@ -83,22 +86,52 @@ if __name__ == "__main__":
 
     print(tf.config.list_physical_devices('GPU'))
 
-    mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
+    # mat = mat73.loadmat("data/GD/1Deg_800Sample.mat")  # 8 time step estimation
 
-    X_1 = mat[
-        "X_train"]  # (sample, time sequence, latitude, longitude, channel) here channels are 1: precipitation, 2: wind velocity in x direction, 3: wind velocity in y direction
-    y_1 = mat["y_train"]  # (sample, time sequence, lat, lon)
+    # X_1 = mat[
+    #     "X_train"]  # (sample, time sequence, latitude, longitude, channel) here channels are 1: precipitation, 2: wind velocity in x direction, 3: wind velocity in y direction
+    # y_1 = mat["y_train"]  # (sample, time sequence, lat, lon)
 
-    train_cutoff = int(X_1.shape[0] * 0.9)
-    X_train = X_1[:train_cutoff]
-    y_train = y_1[:train_cutoff]
-    X_val = X_1[train_cutoff:]
-    y_val = y_1[train_cutoff:]
+    mat_path = "/panfs/jay/groups/6/csci8523/rahim035"
+    mat_files = [
+        f"{mat_path}/{x}" for x in os.listdir(mat_path)
+        if re.match(r'20.*-S.*\.mat', x)
+    ]
+    mat_files.sort()
+
+    Xs = []
+    ys = []
+    for mat_file in tqdm(mat_files):
+        mat = scipy.io.loadmat(mat_file)
+        mat_shape = mat["X"]["imerg"][0][0].shape
+        Xs.append(
+            np.array([
+                mat["X"][x][0][0] for x in ["imerg", "gfs_v", "gfs_tpw"]
+            ]).reshape((mat_shape[0], mat_shape[1], 3)))
+        ys.append(mat["X"]["gfs_pr"][0][0].reshape(
+            (mat_shape[0], mat_shape[1], 1)))
+
+    Xs = np.array(Xs)
+    ys = np.array(ys)
+
+    X, y = sliding_window_expansion(Xs,
+                                    ys,
+                                    input_window_size=12,
+                                    target_window_size=8,
+                                    target_offset=0,
+                                    step=8,
+                                    sample_ratio=1)
+
+    train_cutoff = int(X.shape[0] * 0.9)
+    X_train = X[:train_cutoff]
+    y_train = y[:train_cutoff]
+    X_val = X[train_cutoff:]
+    y_val = y[train_cutoff:]
 
     print("Train feature", X_train.shape, "Train label", y_train.shape)
     print("Validation feature", X_val.shape, "Validation label", y_val.shape)
 
-    del X_1, y_1, mat
+    del Xs, ys, mat
     gc.collect()
 
     storage = optuna.storages.RDBStorage(url="sqlite:///optuna.db",
@@ -111,7 +144,7 @@ if __name__ == "__main__":
     #     "learning_rate": [1e-4, 1e-3, 1e-2],
     #     "batch_size": [4, 8, 12]
     # }
-    study = optuna.create_study(study_name="res1",
+    study = optuna.create_study(study_name="res2",
                                 storage=storage,
                                 sampler=optuna.samplers.TPESampler(),
                                 direction="minimize",

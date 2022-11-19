@@ -2,9 +2,9 @@ from typing import Any, Tuple
 
 import tensorflow as tf
 from keras import Input, Model
-from keras.layers import (Activation, Add, BatchNormalization, Conv3D,
+from keras.layers import (Activation, BatchNormalization, Conv3D,
                           Conv3DTranspose, ConvLSTM2D, Cropping3D, Dropout,
-                          Input, MaxPooling3D, concatenate)
+                          Input, MaxPooling3D, ZeroPadding3D, concatenate)
 from keras.models import Model
 
 
@@ -74,18 +74,13 @@ def unet_up(x0: Any,
     return c1
 
 
-def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
-         num_filters_base: int = 8,
-         dropout_rate: float = 0.2):
-    inputs = Input(shape=input_shape)
-
-    x_init = BatchNormalization()(inputs)  # Try with normalizing the dataset
+def unet_core(x0: Any, num_filters_base: int = 8, dropout_rate: float = 0.2):
     x1 = (ConvLSTM2D(filters=num_filters_base,
                      kernel_size=(3, 3),
                      padding="same",
                      name="conv_lstm1",
                      activation="relu",
-                     return_sequences=True))(x_init)
+                     return_sequences=True))(x0)
     c1 = (ConvLSTM2D(filters=num_filters_base,
                      kernel_size=(3, 3),
                      padding="same",
@@ -132,20 +127,44 @@ def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
                   init_kernel_size=(3, 1, 1),
                   layer_batch_id=7)
 
+    return x42
+
+
+def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
+         num_filters_base: int = 8,
+         dropout_rate: float = 0.2):
+    inputs = Input(shape=input_shape)
+
+    x_init = BatchNormalization()(inputs)  # Try with normalizing the dataset
+
+    x42 = unet_core(x_init,
+                    num_filters_base=num_filters_base,
+                    dropout_rate=dropout_rate)
+
     residual_output = Conv3D(1, kernel_size=(1, 1, 1), padding="same")(x42)
     output = Activation("linear", dtype="float32")(residual_output)
+    output = tf.squeeze(output, axis=4)
 
-    output = tf.squeeze(residual_output, axis=4)
-    residual_input = x_init[:, :, :, :, 0]
-    x = tf.expand_dims(residual_input, axis=4)
+    model = Model(inputs, output)
+    return model
 
-    last_timestep_input_residual = Cropping3D(cropping=((11, 0), (0, 0), (0,
-                                                                          0)),
-                                              data_format="channels_last")(x)
-    last_timestep_input_residual = concatenate([last_timestep_input_residual] *
-                                               8,
-                                               axis=1)
-    combined = Add()([last_timestep_input_residual, residual_output])
+
+def res2(input_shape: Tuple[int] = (12, 256, 620, 3),
+         num_filters_base: int = 8,
+         dropout_rate: float = 0.2):
+    inputs = Input(shape=input_shape)
+
+    x_init = BatchNormalization()(inputs)  # Try with normalizing the dataset
+    x0 = ZeroPadding3D(padding=(0, 0, 2))(x_init)
+
+    x42 = unet_core(x0,
+                    num_filters_base=num_filters_base,
+                    dropout_rate=dropout_rate)
+
+    residual_output = Conv3D(1, kernel_size=(1, 1, 1), padding="same")(x42)
+    output = Activation("linear", dtype="float32")(residual_output)
+    output = Cropping3D(cropping=(0, 0, 2))(output)
+    output = tf.squeeze(output, axis=4)
 
     model = Model(inputs, output)
     return model
