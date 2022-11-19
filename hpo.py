@@ -22,7 +22,7 @@ def objective(trial):
     num_filters_base = trial.suggest_int("num_filters_base", 4, 8, step=2)
     dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-3, log=True)
-    batch_size = trial.suggest_int("batch_size", 1, 2, step=1)
+    batch_size = trial.suggest_int("batch_size", 2, 8, step=2)
 
     train_paths = [
         f"{train_directory}/{x}" for x in os.listdir(train_directory)
