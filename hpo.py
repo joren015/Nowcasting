@@ -70,6 +70,7 @@ def objective(trial):
         ]
 
         try:
+            print("Starting fit")
             results = model.fit(train_dataset,
                                 batch_size=batch_size,
                                 epochs=128,
@@ -110,6 +111,7 @@ if __name__ == "__main__":
 
     Xs = []
     ys = []
+    print("Loading .mat files")
     for mat_file in tqdm(mat_files):
         mat = scipy.io.loadmat(mat_file)
         mat_shape = mat["X"]["imerg"][0][0].shape
@@ -149,10 +151,12 @@ if __name__ == "__main__":
     os.makedirs(train_directory)
     os.makedirs(val_directory)
 
+    print("Writing training dataset to disk")
     for i in tqdm(range(X_train.shape[0])):
         arr = np.array([X_train[i], y_train[i]], dtype=object)
         np.save(f"{train_directory}/{i}.npy", arr)
 
+    print("Writing validation dataset to disk")
     for i in tqdm(range(X_val.shape[0])):
         arr = np.array([X_val[i], X_val[i]], dtype=object)
         np.save(f"{val_directory}/{i}.npy", arr)
@@ -170,4 +174,5 @@ if __name__ == "__main__":
                                 direction="minimize",
                                 load_if_exists=True)
 
+    print("Starting trials")
     study.optimize(objective, n_trials=30)
