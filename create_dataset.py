@@ -13,6 +13,7 @@ val_directory = "data/val"
 
 if __name__ == "__main__":
     mat_path = "/panfs/jay/groups/6/csci8523/rahim035"
+    # mat_path = "data/full_sample"
     mat_files = [
         f"{mat_path}/{x}" for x in os.listdir(mat_path)
         if re.match(r"20.*-S.*\.mat", x)
@@ -25,10 +26,10 @@ if __name__ == "__main__":
     for mat_file in tqdm(mat_files):
         mat = scipy.io.loadmat(mat_file)
         mat_shape = mat["X"]["imerg"][0][0].shape
-        Xs.append(
-            np.array([
-                mat["X"][x][0][0] for x in ["imerg", "gfs_v", "gfs_tpw"]
-            ]).reshape((mat_shape[0], mat_shape[1], 3)))
+        x = np.array(
+            [mat["X"][x][0][0] for x in ["imerg", "gfs_v", "gfs_tpw"]])
+        x = np.moveaxis(x, 0, 2)
+        Xs.append(x)
         ys.append(mat["X"]["gfs_pr"][0][0].reshape(
             (mat_shape[0], mat_shape[1], 1)))
 
