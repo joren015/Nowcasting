@@ -12,7 +12,7 @@ train_directory = "data/train"
 val_directory = "data/val"
 
 if __name__ == "__main__":
-    mat_path = "data/full_sample"
+    mat_path = "/panfs/jay/groups/6/csci8523/rahim035"
     mat_files = [
         f"{mat_path}/{x}" for x in os.listdir(mat_path)
         if re.match(r"20.*-S.*\.mat", x)
@@ -68,5 +68,5 @@ if __name__ == "__main__":
 
     print("Writing validation dataset to disk")
     for i in tqdm(range(X_val.shape[0])):
-        arr = np.array([X_val[i], y_val[i]], dtype=object)
+        arr = np.array([X_val[i], X_val[i]], dtype=object)
         np.save(f"{val_directory}/{i}.npy", arr)
