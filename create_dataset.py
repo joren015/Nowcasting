@@ -50,7 +50,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     mat_path = "/panfs/jay/groups/6/csci8523/rahim035"
-    mat_path = "data/full_sample"
     mat_files = [
         f"{mat_path}/{x}" for x in os.listdir(mat_path)
         if re.match(r"20.*-S.*\.mat", x)
