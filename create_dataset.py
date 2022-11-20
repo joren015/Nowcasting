@@ -68,5 +68,5 @@ if __name__ == "__main__":
 
     print("Writing validation dataset to disk")
     for i in tqdm(range(X_val.shape[0])):
-        arr = np.array([X_val[i], X_val[i]], dtype=object)
+        arr = np.array([X_val[i], y_val[i]], dtype=object)
         np.save(f"{val_directory}/{i}.npy", arr)
