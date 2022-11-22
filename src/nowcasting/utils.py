@@ -1,4 +1,5 @@
-from typing import Tuple
+import random
+from typing import List, Tuple
 
 import keras
 import numpy as np
@@ -58,14 +59,20 @@ def sliding_window_expansion(
 
 class CustomGenerator(keras.utils.Sequence):
 
-    def __init__(self, input_paths, batch_size):
+    def __init__(self,
+                 input_paths: List[str],
+                 batch_size: int,
+                 shuffle: bool = True):
         self.input_paths = input_paths
         self.batch_size = batch_size
+
+        if shuffle:
+            random.shuffle(self.input_paths)
 
     def __len__(self):
         return len(self.input_paths) // int(self.batch_size)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         batch_x = self.input_paths[idx * self.batch_size:(idx + 1) *
                                    self.batch_size]
 
