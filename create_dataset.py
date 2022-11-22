@@ -81,26 +81,21 @@ if __name__ == "__main__":
                                     step=args.step,
                                     sample_ratio=args.sample_ratio)
 
-    train_test_cutoff = int(X.shape[0] * 0.9)
-    train_val_cutoff = int(train_test_cutoff * 0.9)
+    train_val_cutoff = int(X.shape[0] * 0.9)
 
     X_train = X[:train_val_cutoff]
     y_train = y[:train_val_cutoff]
-    X_val = X[train_val_cutoff:train_test_cutoff]
-    y_val = y[train_val_cutoff:train_test_cutoff]
-    X_test = X[train_test_cutoff:]
-    y_test = y[train_test_cutoff:]
+    X_val = X[train_val_cutoff:]
+    y_val = y[train_val_cutoff:]
 
     print("Train features", X_train.shape, "Train labels", y_train.shape)
     print("Validation features", X_val.shape, "Validation labels", y_val.shape)
-    print("Test features", X_test.shape, "Validation labels", y_test.shape)
 
     sub_directory = f"{args.input_window_size}_{args.target_window_size}_{args.target_offset}_{args.step}_{args.sample_ratio}"
     train_directory = f"data/datasets/{sub_directory}/train"
     val_directory = f"data/datasets/{sub_directory}/val"
-    test_directory = f"data/datasets/{sub_directory}/test"
 
-    for directory in [train_directory, val_directory, test_directory]:
+    for directory in [train_directory, val_directory]:
         try:
             rmtree(directory)
         except Exception as e:
@@ -117,8 +112,3 @@ if __name__ == "__main__":
     for i in tqdm(range(X_val.shape[0])):
         arr = np.array([X_val[i], y_val[i]], dtype=object)
         np.save(f"{val_directory}/{i}.npy", arr)
-
-    print("Writing validation dataset to disk")
-    for i in tqdm(range(X_test.shape[0])):
-        arr = np.array([X_test[i], y_test[i]], dtype=object)
-        np.save(f"{test_directory}/{i}.npy", arr)
