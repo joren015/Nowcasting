@@ -149,7 +149,7 @@ def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
     return model
 
 
-def res2(input_shape: Tuple[int] = (12, 256, 620, 3),
+def res2(input_shape: Tuple[int] = (12, 256, 620, 4),
          num_filters_base: int = 8,
          dropout_rate: float = 0.2):
     inputs = Input(shape=input_shape)

@@ -62,11 +62,12 @@ if __name__ == "__main__":
     for mat_file in tqdm(mat_files):
         mat = scipy.io.loadmat(mat_file)
         mat_shape = mat["X"]["imerg"][0][0].shape
-        x = np.array(
-            [mat["X"][x][0][0] for x in ["imerg", "gfs_v", "gfs_tpw"]])
+        x = np.array([
+            mat["X"][x][0][0] for x in ["imerg", "gfs_v", "gfs_tpw", "gfs_u"]
+        ])
         x = np.moveaxis(x, 0, 2)
         Xs.append(x)
-        ys.append(mat["X"]["gfs_pr"][0][0].reshape(
+        ys.append(mat["X"]["imerg"][0][0].reshape(
             (mat_shape[0], mat_shape[1], 1)))
 
     Xs = np.array(Xs)

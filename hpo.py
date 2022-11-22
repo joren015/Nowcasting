@@ -56,7 +56,7 @@ def objective(trial):
         except Exception as e:
             print(e)
 
-        model = res2((12, 256, 620, 3),
+        model = res2((12, 256, 620, 4),
                      num_filters_base=num_filters_base,
                      dropout_rate=dropout_rate)
         model.summary()
