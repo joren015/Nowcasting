@@ -24,17 +24,17 @@ def objective(trial):
 
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
-    test_directory = f"data/datasets/{args.dataset_directory}/test"
+    # test_directory = f"data/datasets/{args.dataset_directory}/test"
 
     train_paths = [
         f"{train_directory}/{x}" for x in os.listdir(train_directory)
     ]
     val_paths = [f"{val_directory}/{x}" for x in os.listdir(val_directory)]
-    test_paths = [f"{test_directory}/{x}" for x in os.listdir(test_directory)]
+    # test_paths = [f"{test_directory}/{x}" for x in os.listdir(test_directory)]
 
     train_dataset = CustomGenerator(train_paths, batch_size)
     val_dataset = CustomGenerator(val_paths, batch_size)
-    test_dataset = CustomGenerator(test_paths, batch_size)
+    # test_dataset = CustomGenerator(test_paths, batch_size)
 
     experiment = mlflow.get_experiment_by_name(study_experiment)
     if experiment is None:
@@ -90,8 +90,8 @@ def objective(trial):
             val_loss = np.min(results.history["val_loss"])
 
             model.load_weights(checkpoint_filepath)
-            test_results = model.evaluate(test_dataset)
-            print(f"TEST RESULTS: {test_results}")
+            # test_results = model.evaluate(test_dataset)
+            # print(f"TEST RESULTS: {test_results}")
             mlflow.log_artifact(checkpoint_filepath)
             return val_loss
         except Exception as e:
