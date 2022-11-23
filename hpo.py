@@ -20,7 +20,7 @@ def objective(trial):
     num_filters_base = trial.suggest_int("num_filters_base", 4, 8, step=2)
     dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-1, log=True)
-    batch_size = trial.suggest_int("batch_size", 2, 16, step=2)
+    batch_size = trial.suggest_int("batch_size", 2, 8, step=2)
 
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
@@ -70,7 +70,7 @@ def objective(trial):
         os.makedirs(checkpoint_directory)
         checkpoint_filepath = f"{checkpoint_directory}/script_n1.h5"
         callbacks = [
-            EarlyStopping(patience=10, verbose=1),
+            EarlyStopping(patience=20, verbose=1),
             ReduceLROnPlateau(factor=0.1, patience=5, min_lr=1e-16, verbose=1),
             ModelCheckpoint(filepath=checkpoint_filepath,
                             verbose=1,
