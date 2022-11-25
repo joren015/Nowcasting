@@ -50,7 +50,7 @@ if __name__ == "__main__":
         help="Prefix used to identify mlflow experiment, by default res2")
     parser.add_argument("--early_stopping",
                         type=bool,
-                        default=True,
+                        default=False,
                         help="Option to use early stopping, by default True")
 
     args = parser.parse_args()
@@ -137,6 +137,7 @@ if __name__ == "__main__":
                                 verbose=1,
                                 validation_data=val_dataset)
 
+            print(results)
             val_loss = np.min(results.history["val_loss"])
             print(f"Min val loss: {val_loss}")
 
