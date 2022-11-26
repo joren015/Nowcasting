@@ -1,19 +1,21 @@
-echo "### Installing dependencies ###"
+if [ ! -d "./.venv" ] 
+then
+    echo "### Creating virtual environment ###"
+    python -m venv .venv
+    source ./.venv/bin/activate
 
-pip install -r requirements_dev.txt
-pip install -r requirements.txt
-pip install --upgrade scipy
-pip install .
+    echo "### Installing dependencies ###"
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements_dev.txt
+    python -m pip install -r requirements.txt
+    python -m pip install .
+else
+    source ./.venv/bin/activate
+fi
 
 echo "### Writing RAM and GPU info"
 nvidia-smi
 free -h
 
-echo "### Starting GPU monitor ###"
-ts=$(date +%s)
-free -h >> ./data/ram/ram_stats_$ts.txt &
-nvidia-smi --query-gpu=utilization.gpu,utilization.memory,memory.total,memory.free,memory.used --format=csv -l 1 -f ./data/gpu/gpu_stats_$ts.csv &
-
 echo "### Starting script ###"
-
-python hpo.py
+python hpo.py --dataset_directory 12_8_0_12_1.0
