@@ -7,3 +7,4 @@ scipy
 tensorflow
 scikit-learn
 tqdm
+opencv-python
