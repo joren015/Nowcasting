@@ -88,6 +88,12 @@ if __name__ == "__main__":
     X_val = X[train_val_cutoff:]
     y_val = y[train_val_cutoff:]
 
+    mu = np.mean(X_train)
+    s = np.std(X_train)
+
+    X_train = (X_train - mu) / s
+    X_val = (X_val - mu) / s
+
     print("Train features", X_train.shape, "Train labels", y_train.shape)
     print("Validation features", X_val.shape, "Validation labels", y_val.shape)
 
@@ -102,6 +108,11 @@ if __name__ == "__main__":
             print(e)
 
         os.makedirs(directory)
+
+    with open(f"data/datasets/{sub_directory}/mean.txt", "w") as f:
+        f.write(str(mu))
+    with open(f"data/datasets/{sub_directory}/std.txt", "w") as f:
+        f.write(str(s))
 
     print("Writing training dataset to disk")
     for i in tqdm(range(X_train.shape[0])):
