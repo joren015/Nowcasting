@@ -8,7 +8,26 @@ from keras.layers import (Activation, BatchNormalization, Conv3D,
 from keras.models import Model
 
 
-def unet_down(x0: Any, num_filters: int = 3, layer_batch_id: int = 1):
+def unet_down(x0: Any, num_filters: int = 3, layer_batch_id: int = 1) -> Any:
+    """
+    unet_down Dimensionality reduction segment of unet structure
+
+    Set of neural network layers that reduce the dimensionality of an input (part of unet structure)
+
+    Parameters
+    ----------
+    x0 : Any
+        Most recent layer in unet structure
+    num_filters : int, optional
+        Number of filters to use for this unet segment, by default 3
+    layer_batch_id : int, optional
+        Identifier used to differenciate unet segments, by default 1
+
+    Returns
+    -------
+    Any
+        Next aggregate layer in unet structure
+    """
     x1 = (ConvLSTM2D(filters=num_filters,
                      kernel_size=(3, 3),
                      padding="same",
@@ -36,6 +55,29 @@ def unet_up(x0: Any,
             num_filters: int = 3,
             init_kernel_size: Tuple[int] = (2, 1, 1),
             layer_batch_id: int = 1):
+    """
+    unet_up Dimensionality expansion segment of unet structure
+
+    Set of neural network layers that increase the dimensionality of an input (part of unet structure)
+
+    Parameters
+    ----------
+    x0 : Any
+        Most recent layer in unet structure
+    c0 : Any
+        Previous layer in unet structure to concatinate onto a later layer
+    num_filters : int, optional
+        Number of filters to use for this unet segment, by default 3
+    init_kernel_size : Tuple[int], optional
+        Initial kernel size to use for dimensionality expansion, by default (2, 1, 1)
+    layer_batch_id : int, optional
+        Identifier used to differenciate unet segments, by default 1
+
+    Returns
+    -------
+    Any
+        Next aggregate layer in unet structure
+    """
     x1 = Conv3D(filters=num_filters,
                 kernel_size=init_kernel_size,
                 padding="valid",
@@ -75,6 +117,25 @@ def unet_up(x0: Any,
 
 
 def unet_core(x0: Any, num_filters_base: int = 8, dropout_rate: float = 0.2):
+    """
+    unet_core Core unet structure
+
+    Common segment of layers used in our unet structure (used in res1 and res2 networks)
+
+    Parameters
+    ----------
+    x0 : Any
+        Initial layer in unet structure
+    num_filters_base : int, optional
+        Number of filters to use as a base for the unet structure, by default 8
+    dropout_rate : float, optional
+        Constant dropout rate used for the unet structure, by default 0.2
+
+    Returns
+    -------
+    Any
+        Next aggregate layer in unet structure
+    """
     x1 = (ConvLSTM2D(filters=num_filters_base,
                      kernel_size=(3, 3),
                      padding="same",
@@ -133,6 +194,25 @@ def unet_core(x0: Any, num_filters_base: int = 8, dropout_rate: float = 0.2):
 def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
          num_filters_base: int = 8,
          dropout_rate: float = 0.2):
+    """
+    res1 Unet structure for square input shape
+
+    Unet structure based on an input that is of shape (12, x, x, 3)
+
+    Parameters
+    ----------
+    input_shape : Tuple[int], optional
+        Shape of input, by default (12, 120, 120, 3)
+    num_filters_base : int, optional
+        Number of filters to use as a base for the unet structure, by default 8
+    dropout_rate : float, optional
+        Constant dropout rate used for the unet structure, by default 0.2
+
+    Returns
+    -------
+    Any
+        Unet model
+    """
     inputs = Input(shape=input_shape)
 
     x_init = BatchNormalization()(inputs)  # Try with normalizing the dataset
@@ -152,6 +232,25 @@ def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
 def res2(input_shape: Tuple[int] = (12, 256, 620, 4),
          num_filters_base: int = 8,
          dropout_rate: float = 0.2):
+    """
+    res1 Unet structure for rectangular input shape
+
+    Unet structure based on an input that is of shape (12, 256, 620, 4)
+
+    Parameters
+    ----------
+    input_shape : Tuple[int], optional
+        Shape of input, by default (12, 256, 620, 4)
+    num_filters_base : int, optional
+        Number of filters to use as a base for the unet structure, by default 8
+    dropout_rate : float, optional
+        Constant dropout rate used for the unet structure, by default 0.2
+
+    Returns
+    -------
+    Any
+        Unet model
+    """
     inputs = Input(shape=input_shape)
 
     x_init = BatchNormalization()(inputs)  # Try with normalizing the dataset
