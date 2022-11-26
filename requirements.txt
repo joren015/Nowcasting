@@ -3,7 +3,7 @@ numpy
 mat73
 h5py
 psutil
-scipy
+scipy==1.9.3
 tensorflow
 scikit-learn
 tqdm
