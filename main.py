@@ -1,5 +1,4 @@
 import argparse
-import gc
 import os
 
 import keras
@@ -10,7 +9,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator
+from nowcasting.utils import CustomGenerator, KGMeanSquaredError
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -46,15 +45,28 @@ if __name__ == "__main__":
     parser.add_argument(
         "--experiment_prefix",
         type=str,
-        default="res2",
-        help="Prefix used to identify mlflow experiment, by default res2")
+        default="res2.0.1",
+        help="Prefix used to identify mlflow experiment, by default res2.0.1")
     parser.add_argument("--early_stopping",
                         type=bool,
                         default=False,
                         help="Option to use early stopping, by default True")
+    parser.add_argument(
+        "--loss_fn",
+        type=str,
+        default="kgmse",
+        help="Which loss function to use when training, by default kgmse")
+    parser.add_argument(
+        "--kgmse_alpha",
+        type=float,
+        default=0.1,
+        help=
+        "Weight apply to kgmse error (only applicable when using loss_fn kgmse), by default 0.1"
+    )
 
     args = parser.parse_args()
 
+    # Setting GPU related environment variables
     os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
     tf.config.optimizer.set_experimental_options({"layout_optimizer": False})
 
@@ -69,8 +81,10 @@ if __name__ == "__main__":
 
     print(tf.config.list_physical_devices("GPU"))
 
+    # Variable used to identify mlflow experiment
     study_experiment = f"{args.experiment_prefix}_{args.dataset_directory}"
 
+    # Creating train/test/val datasets
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
     # test_directory = f"data/datasets/{args.dataset_directory}/test"
@@ -85,39 +99,54 @@ if __name__ == "__main__":
     val_dataset = CustomGenerator(val_paths, args.batch_size)
     # test_dataset = CustomGenerator(test_paths, batch_size)
 
+    # Creating mlflow experiment if it does not already exist
     experiment = mlflow.get_experiment_by_name(study_experiment)
     if experiment is None:
         mlflow.create_experiment(study_experiment)
         experiment = mlflow.get_experiment_by_name(study_experiment)
 
+    # Setting mlflow to autolog tensorflow parameters and metrics
     mlflow.tensorflow.autolog(log_models=False)
 
+    # Starting mlflow run
     with mlflow.start_run(experiment_id=experiment.experiment_id) as run:
+        # Logging manually selected parameters
         try:
             params = {
-                "selected_num_filters_base": args.num_filters_base,
-                "selected_dropout_rate": args.dropout_rate,
-                "selected_learning_rate": args.learning_rate,
-                "selected_batch_size": args.batch_size
+                "hpo_num_filters_base": args.num_filters_base,
+                "hpo_dropout_rate": args.dropout_rate,
+                "hpo_learning_rate": args.learning_rate,
+                "hpo_batch_size": args.batch_size,
+                "hpo_loss_fn": args.loss_fn,
+                "hpo_kgmse_alpha": args.kgmse_alpha
             }
             print(params)
             mlflow.log_params(params)
         except Exception as e:
             print(e)
 
+        # Instantiating res2 model
         model = res2((12, 256, 620, 4),
                      num_filters_base=args.num_filters_base,
                      dropout_rate=args.dropout_rate)
         model.summary()
 
+        # Selecting loss function based on passed argument loss_fn
+        loss = "mean_squared_error"
+        if args.loss_fn == "kgmse":
+            loss = KGMeanSquaredError(alpha=args.kgmse_alpha)
+
         model.compile(
-            loss="mean_absolute_error",
+            loss=loss,
             optimizer=keras.optimizers.Adam(learning_rate=args.learning_rate),
             metrics=["mae", "mse"])
 
+        # Setting checkpoint directory for best weights
         checkpoint_directory = f"data/checkpoints/{run.info.run_id}"
         os.makedirs(checkpoint_directory)
         checkpoint_filepath = f"{checkpoint_directory}/script_n1.h5"
+
+        # Creating list of callbacks to use during training
         callbacks = [
             ReduceLROnPlateau(factor=0.1, patience=5, min_lr=1e-16, verbose=1),
             ModelCheckpoint(filepath=checkpoint_filepath,
@@ -125,9 +154,12 @@ if __name__ == "__main__":
                             save_best_only=True,
                             save_weights_only=True)
         ]
+
+        # Adding early stopping callback based on passed argument early_stopping
         if args.early_stopping:
             callbacks.append(EarlyStopping(patience=20, verbose=1), )
 
+        # Fitting model
         try:
             print("Starting fit")
             results = model.fit(train_dataset,
@@ -141,10 +173,8 @@ if __name__ == "__main__":
             val_loss = np.min(results.history["val_loss"])
             print(f"Min val loss: {val_loss}")
 
+            # Reloading best weights and saving model to mlflow
             model.load_weights(checkpoint_filepath)
             mlflow.log_artifact(checkpoint_filepath)
         except Exception as e:
             print(e)
-
-        del model
-        gc.collect()

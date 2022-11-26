@@ -12,15 +12,17 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator
+from nowcasting.utils import CustomGenerator, KGMeanSquaredError
 
 
 def objective(trial):
     time.sleep(5)
     num_filters_base = trial.suggest_int("num_filters_base", 4, 8, step=2)
-    dropout_rate = trial.suggest_float("dropout_rate", 0.05, 0.5, step=0.05)
+    dropout_rate = trial.suggest_float("dropout_rate", 0.1, 0.75, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-1, log=True)
-    batch_size = trial.suggest_int("batch_size", 2, 8, step=2)
+    batch_size = trial.suggest_int("batch_size", 4, 8, step=4)
+    loss_fn = trial.suggest_categorical("loss_fn", ["mse", "kgmse"])
+    kgmse_alpha = trial.suggest_float("kgmse_alpha", 0.1, 1.0, step=0.1)
 
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
@@ -49,7 +51,9 @@ def objective(trial):
                 "hpo_num_filters_base": num_filters_base,
                 "hpo_dropout_rate": dropout_rate,
                 "hpo_learning_rate": learning_rate,
-                "hpo_batch_size": batch_size
+                "hpo_batch_size": batch_size,
+                "hpo_loss_fn": loss_fn,
+                "hpo_kgmse_alpha": kgmse_alpha
             }
             print(params)
             mlflow.log_params(params)
@@ -61,8 +65,12 @@ def objective(trial):
                      dropout_rate=dropout_rate)
         model.summary()
 
+        loss = "mean_squared_error"
+        if loss_fn == "kgmse":
+            loss = KGMeanSquaredError(alpha=kgmse_alpha)
+
         model.compile(
-            loss="mean_absolute_error",
+            loss=loss,
             optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
             metrics=["mae", "mse"])
 
@@ -70,8 +78,9 @@ def objective(trial):
         os.makedirs(checkpoint_directory)
         checkpoint_filepath = f"{checkpoint_directory}/script_n1.h5"
         callbacks = [
-            EarlyStopping(patience=20, verbose=1),
-            ReduceLROnPlateau(factor=0.1, patience=5, min_lr=1e-16, verbose=1),
+            EarlyStopping(patience=25, verbose=1),
+            ReduceLROnPlateau(factor=0.1, patience=10, min_lr=1e-16,
+                              verbose=1),
             ModelCheckpoint(filepath=checkpoint_filepath,
                             verbose=1,
                             save_best_only=True,
@@ -113,6 +122,12 @@ if __name__ == "__main__":
         help=
         "Subdirectory in data/datasets to use for training, testing, and validation. By default 12_8_0_20_1.0"
     )
+    parser.add_argument(
+        "--experiment_prefix",
+        type=str,
+        default="hpo_res2.0.1",
+        help=
+        "Prefix used to identify mlflow experiment, by default hpo_res2.0.1")
 
     args = parser.parse_args()
 
@@ -130,16 +145,25 @@ if __name__ == "__main__":
 
     print(tf.config.list_physical_devices("GPU"))
 
-    study_experiment = f"res2_{args.dataset_directory}"
+    study_experiment = f"{args.experiment_prefix}_{args.dataset_directory}"
     storage = optuna.storages.RDBStorage(url="sqlite:///optuna.db",
                                          heartbeat_interval=60,
                                          grace_period=120)
 
-    study = optuna.create_study(study_name=study_experiment,
-                                storage=storage,
-                                sampler=optuna.samplers.TPESampler(),
-                                direction="minimize",
-                                load_if_exists=True)
+    search_space = {
+        "num_filters_base": [4, 8],
+        "dropout_rate": [0.1, 0.5],
+        "learning_rate": [1e-8, 1e-4],
+        "batch_size": [4, 8],
+        "loss_fn": ["mse", "kgmse"],
+        "kgmse_alpha": [0.1, 0.5, 1.0]
+    }
+    study = optuna.create_study(
+        study_name=study_experiment,
+        storage=storage,
+        sampler=optuna.samplers.GridSampler(search_space),
+        direction="minimize",
+        load_if_exists=True)
 
     print("Starting trials")
     study.optimize(objective, n_trials=30)
