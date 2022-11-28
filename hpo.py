@@ -66,8 +66,6 @@ def objective(trial):
         model.summary()
 
         loss = "mean_squared_error"
-        if loss_fn == "kgmse":
-            loss = KGMeanSquaredError(alpha=kgmse_alpha)
 
         model.compile(
             loss=loss,
@@ -125,9 +123,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--experiment_prefix",
         type=str,
-        default="hpo_res2.0.1",
-        help=
-        "Prefix used to identify mlflow experiment, by default hpo_res2.0.1")
+        default="hpo_res_mse",
+        help="Prefix used to identify mlflow experiment, by default hpo_res_mse"
+    )
 
     args = parser.parse_args()
 
@@ -152,11 +150,9 @@ if __name__ == "__main__":
 
     search_space = {
         "num_filters_base": [4, 8],
-        "dropout_rate": [0.1, 0.5],
-        "learning_rate": [1e-8, 1e-4],
-        "batch_size": [4, 8],
-        "loss_fn": ["mse", "kgmse"],
-        "kgmse_alpha": [0.1, 0.5, 1.0]
+        "dropout_rate": [0.1, 0.25, 0.5],
+        "learning_rate": [1e-12, 1e-8, 1e-4],
+        "batch_size": [4, 8]
     }
     study = optuna.create_study(
         study_name=study_experiment,
