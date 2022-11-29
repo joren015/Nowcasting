@@ -21,8 +21,8 @@ def objective(trial):
     dropout_rate = trial.suggest_float("dropout_rate", 0.1, 0.75, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 8, step=4)
-    loss_fn = trial.suggest_categorical("loss_fn", ["mse", "kgmse"])
-    kgmse_alpha = trial.suggest_float("kgmse_alpha", 0.1, 1.0, step=0.1)
+    # loss_fn = trial.suggest_categorical("loss_fn", ["mse", "kgmse"])
+    # kgmse_alpha = trial.suggest_float("kgmse_alpha", 0.1, 1.0, step=0.1)
 
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
@@ -52,8 +52,8 @@ def objective(trial):
                 "hpo_dropout_rate": dropout_rate,
                 "hpo_learning_rate": learning_rate,
                 "hpo_batch_size": batch_size,
-                "hpo_loss_fn": loss_fn,
-                "hpo_kgmse_alpha": kgmse_alpha
+                # "hpo_loss_fn": loss_fn,
+                # "hpo_kgmse_alpha": kgmse_alpha
             }
             print(params)
             mlflow.log_params(params)
