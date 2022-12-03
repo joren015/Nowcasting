@@ -1,30 +1,20 @@
 import json
 import os
 import random
-from shutil import rmtree
 
 import matplotlib.pyplot as plt
 import mlflow
 import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator
+from nowcasting.utils import CustomGenerator, plot_samples, recreate_directory
 
 seed = 42
 random.seed(seed)
 np.random.seed(seed)
 tf.random.set_seed(seed)
-
-
-def recreate_directory(directory):
-    try:
-        rmtree(directory)
-    except Exception as e:
-        print(e)
-
-    os.makedirs(directory)
-
 
 if __name__ == "__main__":
     # Absolute paths
@@ -77,69 +67,99 @@ if __name__ == "__main__":
 
     metrics = {}
     for dataset_split, dataset_directory in datasets.items():
-
-        for x in [
-                "input", "expected_output", "predicted_output",
-                "comparison_output"
-        ]:
-            recreate_directory(f"{results_dir}/{dataset_split}/{x}")
-
         eval_paths = [
             f"{dataset_directory}/{x}" for x in os.listdir(dataset_directory)
         ]
         random.shuffle(eval_paths)
         eval_dataset = CustomGenerator(eval_paths, 1, shuffle=False)
-        eval_subset = CustomGenerator(eval_paths[:10], 1, shuffle=False)
 
         mae, _, mse = model.evaluate(eval_dataset)
         metrics[dataset_split] = {"mae": mae, "mse": mse}
 
-        y_pred = model.predict(eval_subset)
-        for k in range(y_pred.shape[0]):
-            X, y = eval_subset.__getitem__(k)
+        y_pred = model.predict(eval_dataset)
+
+        Xs = []
+        ys = []
+        y_persists = []
+        for k in tqdm(range(y_pred.shape[0])):
+            X, y = eval_dataset.__getitem__(k)
             X = X[0]
-            y = y[0]
-            y_hat = y_pred[k]
+            y = y[0][:, :, :, 0]
 
-            # Input figures
-            fig, axs = plt.subplots(2, 6, figsize=(30, 5))
-            for i in range(2):
-                for j in range(6):
-                    axs[i, j].imshow(X[i * 6 + j, :, :, 0])
+            Xs.append(X)
+            ys.append(y)
+            y_persists.append(np.array([X[-1, :, :, 0] for i in range(8)]))
 
-            fig.tight_layout()
-            fig.savefig(f"{results_dir}/{dataset_split}/input/{k}.png")
+        X = np.array(Xs)
+        y = np.array(ys)
+        y_persist = np.array(y_persists)
 
-            # Expected output figures
-            fig, axs = plt.subplots(2, 4, figsize=(25, 5))
-            for i in range(2):
-                for j in range(4):
-                    axs[i, j].imshow(y[i * 4 + j, :, :, 0])
+        # Finding representative examples to plot
+        y_mse_sample = np.mean((y - y_pred)**2, axis=(1, 2, 3)).reshape(-1)
+        y_mse_sample_argsort = np.argsort(y_mse_sample)
+        n = y_mse_sample_argsort.shape[0]
 
-            fig.tight_layout()
+        err_samples = {
+            "min_err": y_mse_sample_argsort[0],
+            "low_err": y_mse_sample_argsort[n // 4],
+            "mid_err": y_mse_sample_argsort[n // 2],
+            "high_err": y_mse_sample_argsort[(n // 4) * 3],
+            "max_err": y_mse_sample_argsort[-1]
+        }
+        for k, v in err_samples.items():
+            plot_samples(X[v], y[v], y_pred[v], results_dir,
+                         f"{dataset_split}_{k}")
+
+        # Calculating mse metrics by lead time
+        y_mse = np.mean((y - y_pred)**2, axis=(0, 2, 3)).reshape(-1)
+        y_persist_mse = np.mean((y - y_persist)**2, axis=(0, 2, 3)).reshape(-1)
+
+        x_plt = np.arange(y_mse.shape[0])
+        fig, ax = plt.subplots(1, figsize=(15, 5))
+
+        ax.plot(x_plt, y_mse, label="Our model", marker="s")
+        ax.plot(x_plt, y_persist_mse, label="Persistence", marker="s")
+        ax.set_title(f"Mean Squared Error by Lead Time ({dataset_split})")
+        ax.set_xlabel("Lead Time")
+        ax.set_ylabel("MSE")
+        ax.legend()
+
+        fig.savefig(f"{results_dir}/{dataset_split}_mse_by_lead_time.png")
+
+        # Calculating csi metrics my lead time
+        for threshold in [0.125, 2, 5, 10]:
+            y_th = y > threshold
+            y_pred_th = y_pred > threshold
+            tp = np.count_nonzero(np.logical_and(y_th, y_pred_th),
+                                  axis=(0, 2, 3))
+            fp_fn = np.count_nonzero(np.logical_xor(y_th, y_pred_th),
+                                     axis=(0, 2, 3))
+            y_csi = tp / (tp + fp_fn)
+
+            y_persist_th = y_persist > threshold
+            tp = np.count_nonzero(np.logical_and(y_th, y_persist_th),
+                                  axis=(0, 2, 3))
+            fp_fn = np.count_nonzero(np.logical_xor(y_th, y_persist_th),
+                                     axis=(0, 2, 3))
+            y_persist_csi = tp / (tp + fp_fn)
+
+            x_plt = np.arange(y_csi.shape[0])
+            fig, ax = plt.subplots(1, figsize=(15, 5))
+
+            ax.plot(x_plt, y_csi, label="Our model", marker="s")
+
+            ax.plot(x_plt, y_persist_csi, label="Persistence", marker="s")
+
+            ax.set_title(
+                f"Critical Success Index by Lead Time at {threshold} mm per hr ({dataset_split})"
+            )
+            ax.set_xlabel("Lead Time")
+            ax.set_ylabel("CSI")
+            ax.legend()
+
             fig.savefig(
-                f"{results_dir}/{dataset_split}/expected_output/{k}.png")
-
-            # Predicted figures
-            fig, axs = plt.subplots(2, 4, figsize=(25, 5))
-
-            for i in range(2):
-                for j in range(4):
-                    axs[i, j].imshow(y_hat[i * 4 + j, :, :])
-
-            fig.tight_layout()
-            fig.savefig(
-                f"{results_dir}/{dataset_split}/predicted_output/{k}.png")
-
-            # Comparison figures
-            fig, axs = plt.subplots(2, 4, figsize=(25, 5))
-            for j in range(4):
-                axs[0, j].imshow(y[j, :, :, 0])
-                axs[1, j].imshow(y_hat[j, :, :])
-
-            fig.tight_layout()
-            fig.savefig(
-                f"{results_dir}/{dataset_split}/comparison_output/{k}.png")
+                f"{results_dir}/{dataset_split}_csi_by_lead_time_{threshold}.png"
+            )
 
     with open(f"{results_dir}/metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
