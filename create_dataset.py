@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog="create_dataset.py",
         description=
-        "Builds a train, test, and validation dataset based on the sliding window expansion function",
+        "Builds a train and validation dataset based on the sliding window expansion function",
         epilog=
         "Resulting datasets are written to data/datasets in a directory following the pattern input_window_size_target_window_size_target_offset_step_sample_ratio"
     )
