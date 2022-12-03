@@ -1,5 +1,6 @@
 import argparse
 import os
+import random
 
 import keras
 import mlflow
@@ -10,6 +11,11 @@ from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
 from nowcasting.utils import CustomGenerator, KGMeanSquaredError
+
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+tf.random.set_seed(seed)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

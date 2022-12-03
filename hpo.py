@@ -1,6 +1,7 @@
 import argparse
 import gc
 import os
+import random
 import time
 
 import keras
@@ -13,6 +14,11 @@ from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
 from nowcasting.utils import CustomGenerator, KGMeanSquaredError
+
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+tf.random.set_seed(seed)
 
 
 def objective(trial):
