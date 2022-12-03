@@ -91,7 +91,7 @@ if __name__ == "__main__":
         eval_dataset = CustomGenerator(eval_paths, 1, shuffle=False)
         eval_subset = CustomGenerator(eval_paths[:10], 1, shuffle=False)
 
-        mae, _, mse = model.evaluate(eval_subset)
+        mae, _, mse = model.evaluate(eval_dataset)
         metrics[dataset_split] = {"mae": mae, "mse": mse}
 
         y_pred = model.predict(eval_subset)
