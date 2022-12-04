@@ -115,7 +115,7 @@ if __name__ == "__main__":
         y_persist_mse = np.mean((y - y_persist)**2, axis=(0, 2, 3)).reshape(-1)
 
         x_plt = np.arange(y_mse.shape[0])
-        fig, ax = plt.subplots(1, figsize=(15, 5))
+        fig, ax = plt.subplots(1, figsize=(15, 10))
 
         ax.plot(x_plt, y_mse, label="Our model", marker="s")
         ax.plot(x_plt, y_persist_mse, label="Persistence", marker="s")
@@ -144,7 +144,7 @@ if __name__ == "__main__":
             y_persist_csi = tp / (tp + fp_fn)
 
             x_plt = np.arange(y_csi.shape[0])
-            fig, ax = plt.subplots(1, figsize=(15, 5))
+            fig, ax = plt.subplots(1, figsize=(15, 10))
 
             ax.plot(x_plt, y_csi, label="Our model", marker="s")
 
