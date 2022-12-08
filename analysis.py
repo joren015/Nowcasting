@@ -16,6 +16,11 @@ random.seed(seed)
 np.random.seed(seed)
 tf.random.set_seed(seed)
 
+CB_color_cycle = [
+    '#377eb8', '#ff7f00', '#4daf4a', '#f781bf', '#a65628', '#984ea3',
+    '#999999', '#e41a1c', '#dede00'
+]
+
 if __name__ == "__main__":
     # Absolute paths
     mlruns_path = "/panfs/jay/groups/6/csci8523/joren015/repos/Nowcasting/mlruns"
@@ -115,10 +120,18 @@ if __name__ == "__main__":
         y_persist_mse = np.mean((y - y_persist)**2, axis=(0, 2, 3)).reshape(-1)
 
         x_plt = np.arange(y_mse.shape[0])
-        fig, ax = plt.subplots(1, figsize=(15, 10))
+        fig, ax = plt.subplots(1, figsize=(10, 5))
 
-        ax.plot(x_plt, y_mse, label="Our model", marker="s")
-        ax.plot(x_plt, y_persist_mse, label="Persistence", marker="s")
+        ax.plot(x_plt,
+                y_mse,
+                label="Our model",
+                marker="s",
+                c=CB_color_cycle[0])
+        ax.plot(x_plt,
+                y_persist_mse,
+                label="Persistence",
+                marker="s",
+                c=CB_color_cycle[1])
         ax.set_title(f"Mean Squared Error by Lead Time ({dataset_split})")
         ax.set_xlabel("Lead Time")
         ax.set_ylabel("MSE")
@@ -144,11 +157,19 @@ if __name__ == "__main__":
             y_persist_csi = tp / (tp + fp_fn)
 
             x_plt = np.arange(y_csi.shape[0])
-            fig, ax = plt.subplots(1, figsize=(15, 10))
+            fig, ax = plt.subplots(1, figsize=(10, 5))
 
-            ax.plot(x_plt, y_csi, label="Our model", marker="s")
+            ax.plot(x_plt,
+                    y_csi,
+                    label="Our model",
+                    marker="s",
+                    c=CB_color_cycle[0])
 
-            ax.plot(x_plt, y_persist_csi, label="Persistence", marker="s")
+            ax.plot(x_plt,
+                    y_persist_csi,
+                    label="Persistence",
+                    marker="s",
+                    c=CB_color_cycle[1])
 
             ax.set_title(
                 f"Critical Success Index by Lead Time at {threshold} mm per hr ({dataset_split})"
