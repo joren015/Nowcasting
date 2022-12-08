@@ -58,6 +58,7 @@ if __name__ == "__main__":
 
     Xs = []
     ys = []
+    gfss = []
     print("Loading .mat files")
     for mat_file in tqdm(mat_files):
         mat = scipy.io.loadmat(mat_file)
@@ -69,9 +70,12 @@ if __name__ == "__main__":
         Xs.append(x)
         ys.append(mat["X"]["imerg"][0][0].reshape(
             (mat_shape[0], mat_shape[1], 1)))
+        gfss.append(mat["X"]["gfs_pr"][0][0].reshape(
+            (mat_shape[0], mat_shape[1], 1)))
 
     Xs = np.array(Xs)
     ys = np.array(ys)
+    gfss = np.array(gfss)
 
     X, y = sliding_window_expansion(Xs,
                                     ys,
@@ -81,8 +85,18 @@ if __name__ == "__main__":
                                     step=args.step,
                                     sample_ratio=args.sample_ratio)
 
+    _, gfs = sliding_window_expansion(
+        Xs,
+        gfss,
+        input_window_size=args.input_window_size,
+        target_window_size=args.target_window_size,
+        target_offset=args.target_offset,
+        step=args.step,
+        sample_ratio=args.sample_ratio)
+
     sub_directory = f"{args.input_window_size}_{args.target_window_size}_{args.target_offset}_{args.step}_{args.sample_ratio}"
     test_directory = f"data/datasets/{sub_directory}/test"
+    gfs_directory = f"data/datasets/{sub_directory}/gfs"
 
     with open(f"data/datasets/{sub_directory}/mean.txt", "r") as f:
         mu = float(f.read())
@@ -93,14 +107,20 @@ if __name__ == "__main__":
 
     print("Features", X.shape, "Labels", X.shape)
 
-    try:
-        rmtree(test_directory)
-    except Exception as e:
-        print(e)
+    for dir in [test_directory, gfs_directory]:
+        try:
+            rmtree(dir)
+        except Exception as e:
+            print(e)
 
-    os.makedirs(test_directory)
+        os.makedirs(dir)
 
     print("Writing training dataset to disk")
     for i in tqdm(range(X.shape[0])):
         arr = np.array([X[i], y[i]], dtype=object)
         np.save(f"{test_directory}/{i}.npy", arr)
+
+    print("Writing training dataset to disk")
+    for i in tqdm(range(X.shape[0])):
+        arr = np.array([X[i], gfs[i]], dtype=object)
+        np.save(f"{gfs_directory}/{i}.npy", arr)
