@@ -226,3 +226,4 @@ mlruns/
 mlflow.db
 optuna.db
 slurm-*.out
+*.png

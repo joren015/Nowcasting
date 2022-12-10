@@ -77,26 +77,32 @@ if __name__ == "__main__":
     ys = np.array(ys)
     gfss = np.array(gfss)
 
-    X, y = sliding_window_expansion(Xs,
-                                    ys,
-                                    input_window_size=args.input_window_size,
-                                    target_window_size=args.target_window_size,
-                                    target_offset=args.target_offset,
-                                    step=args.step,
-                                    sample_ratio=args.sample_ratio)
-
-    _, gfs = sliding_window_expansion(
+    X, y = sliding_window_expansion(
+        Xs,
+        ys,
+        input_window_size=args.input_window_size,
+        target_window_size=args.target_window_size,
+        target_offset=args.target_offset,
+        step=args.step,
+        # sample_ratio=args.sample_ratio)
+        sample_ratio=1)
+    X_gfs, gfs = sliding_window_expansion(
         Xs,
         gfss,
         input_window_size=args.input_window_size,
         target_window_size=args.target_window_size,
         target_offset=args.target_offset,
         step=args.step,
-        sample_ratio=args.sample_ratio)
+        # sample_ratio=args.sample_ratio)
+        sample_ratio=1)
 
-    sub_directory = f"{args.input_window_size}_{args.target_window_size}_{args.target_offset}_{args.step}_{args.sample_ratio}"
+    swe_test = np.all(X == X_gfs)
+    assert swe_test
+    print(swe_test)
+
+    sub_directory = f"{args.input_window_size}_{args.target_window_size}_{args.target_offset}_{args.step}_1.0"
     test_directory = f"data/datasets/{sub_directory}/test"
-    gfs_directory = f"data/datasets/{sub_directory}/gfs"
+    gfs_directory = f"data/datasets/{sub_directory}/gfs/test"
 
     with open(f"data/datasets/{sub_directory}/mean.txt", "r") as f:
         mu = float(f.read())
@@ -115,12 +121,12 @@ if __name__ == "__main__":
 
         os.makedirs(dir)
 
-    print("Writing training dataset to disk")
+    print("Writing test dataset to disk")
     for i in tqdm(range(X.shape[0])):
         arr = np.array([X[i], y[i]], dtype=object)
         np.save(f"{test_directory}/{i}.npy", arr)
 
-    print("Writing training dataset to disk")
+    print("Writing gfs test dataset to disk")
     for i in tqdm(range(X.shape[0])):
         arr = np.array([X[i], gfs[i]], dtype=object)
         np.save(f"{gfs_directory}/{i}.npy", arr)

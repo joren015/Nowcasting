@@ -42,10 +42,10 @@ if __name__ == "__main__":
         help=
         "Number of timesteps to use to determine the start of the next input and target pair. By default 20"
     )
-    parser.add_argument("--sample_ratio",
-                        type=float,
-                        default=1.0,
-                        help="Percentage of results to return. By default 1.0")
+    # parser.add_argument("--sample_ratio",
+    #                     type=float,
+    #                     default=1.0,
+    #                     help="Percentage of results to return. By default 1.0")
 
     args = parser.parse_args()
 
@@ -58,6 +58,7 @@ if __name__ == "__main__":
 
     Xs = []
     ys = []
+    gfss = []
     print("Loading .mat files")
     for mat_file in tqdm(mat_files):
         mat = scipy.io.loadmat(mat_file)
@@ -69,24 +70,44 @@ if __name__ == "__main__":
         Xs.append(x)
         ys.append(mat["X"]["imerg"][0][0].reshape(
             (mat_shape[0], mat_shape[1], 1)))
+        gfss.append(mat["X"]["gfs_pr"][0][0].reshape(
+            (mat_shape[0], mat_shape[1], 1)))
 
     Xs = np.array(Xs)
     ys = np.array(ys)
+    gfss = np.array(gfss)
 
-    X, y = sliding_window_expansion(Xs,
-                                    ys,
-                                    input_window_size=args.input_window_size,
-                                    target_window_size=args.target_window_size,
-                                    target_offset=args.target_offset,
-                                    step=args.step,
-                                    sample_ratio=args.sample_ratio)
+    X, y = sliding_window_expansion(
+        Xs,
+        ys,
+        input_window_size=args.input_window_size,
+        target_window_size=args.target_window_size,
+        target_offset=args.target_offset,
+        step=args.step,
+        # sample_ratio=args.sample_ratio)
+        sample_ratio=1)
+    X_gfs, gfs = sliding_window_expansion(
+        Xs,
+        gfss,
+        input_window_size=args.input_window_size,
+        target_window_size=args.target_window_size,
+        target_offset=args.target_offset,
+        step=args.step,
+        # sample_ratio=args.sample_ratio)
+        sample_ratio=1)
+
+    swe_test = np.all(X == X_gfs)
+    assert swe_test
+    print(swe_test)
 
     train_val_cutoff = int(X.shape[0] * 0.9)
 
     X_train = X[:train_val_cutoff]
     y_train = y[:train_val_cutoff]
+    gfs_train = gfs[:train_val_cutoff]
     X_val = X[train_val_cutoff:]
     y_val = y[train_val_cutoff:]
+    gfs_val = gfs[train_val_cutoff:]
 
     mu = np.mean(X_train)
     s = np.std(X_train)
@@ -97,11 +118,16 @@ if __name__ == "__main__":
     print("Train features", X_train.shape, "Train labels", y_train.shape)
     print("Validation features", X_val.shape, "Validation labels", y_val.shape)
 
-    sub_directory = f"{args.input_window_size}_{args.target_window_size}_{args.target_offset}_{args.step}_{args.sample_ratio}"
+    sub_directory = f"{args.input_window_size}_{args.target_window_size}_{args.target_offset}_{args.step}_1.0"
     train_directory = f"data/datasets/{sub_directory}/train"
     val_directory = f"data/datasets/{sub_directory}/val"
+    gfs_train_directory = f"data/datasets/{sub_directory}/gfs/train"
+    gfs_val_directory = f"data/datasets/{sub_directory}/gfs/val"
 
-    for directory in [train_directory, val_directory]:
+    for directory in [
+            train_directory, val_directory, gfs_train_directory,
+            gfs_val_directory
+    ]:
         try:
             rmtree(directory)
         except Exception as e:
@@ -114,7 +140,7 @@ if __name__ == "__main__":
     with open(f"data/datasets/{sub_directory}/std.txt", "w") as f:
         f.write(str(s))
 
-    print("Writing training dataset to disk")
+    print("Writing train dataset to disk")
     for i in tqdm(range(X_train.shape[0])):
         arr = np.array([X_train[i], y_train[i]], dtype=object)
         np.save(f"{train_directory}/{i}.npy", arr)
@@ -123,3 +149,13 @@ if __name__ == "__main__":
     for i in tqdm(range(X_val.shape[0])):
         arr = np.array([X_val[i], y_val[i]], dtype=object)
         np.save(f"{val_directory}/{i}.npy", arr)
+
+    print("Writing gfs train dataset to disk")
+    for i in tqdm(range(X_train.shape[0])):
+        arr = np.array([X_train[i], gfs_train[i]], dtype=object)
+        np.save(f"{gfs_train_directory}/{i}.npy", arr)
+
+    print("Writing gfs validation dataset to disk")
+    for i in tqdm(range(X_val.shape[0])):
+        arr = np.array([X_val[i], gfs_val[i]], dtype=object)
+        np.save(f"{gfs_val_directory}/{i}.npy", arr)
