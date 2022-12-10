@@ -250,10 +250,9 @@ def plot_samples(X: np.ndarray, y: np.ndarray, y_hat: np.ndarray,
 def csi(y: np.ndarray,
         y_pred: np.ndarray,
         threshold: float = 0.125,
-        axis: Tuple[int] = (1, 2, 3)):
+        axis: Tuple[int] = (0, 2, 3)):
     y_th = y > threshold
     y_pred_th = y_pred > threshold
-
     tp = np.count_nonzero(np.logical_and(y_th, y_pred_th), axis=axis)
     fp_fn = np.count_nonzero(np.logical_xor(y_th, y_pred_th), axis=axis)
     return tp / (tp + fp_fn)

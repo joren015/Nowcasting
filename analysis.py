@@ -9,7 +9,8 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator, plot_samples, recreate_directory
+from nowcasting.utils import (CustomGenerator, csi, plot_samples,
+                              recreate_directory)
 
 seed = 42
 random.seed(seed)
@@ -24,17 +25,11 @@ CB_color_cycle = [
 if __name__ == "__main__":
     # Absolute paths
     mlruns_path = "/panfs/jay/groups/6/csci8523/joren015/repos/Nowcasting/mlruns"
-    train_path = "/panfs/jay/groups/6/csci8523/joren015/repos/Nowcasting/data/datasets/12_8_0_20_1.0/train/"
-    val_path = "/panfs/jay/groups/6/csci8523/joren015/repos/Nowcasting/data/datasets/12_8_0_20_1.0/val/"
-    test_path = "/panfs/jay/groups/6/csci8523/joren015/repos/Nowcasting/data/datasets/12_8_0_20_1.0/test/"
+    dataset_directory = "/panfs/jay/groups/6/csci8523/joren015/repos/Nowcasting/data/datasets/12_8_0_20_1.0"
 
     # Relative paths
     mlruns_path = "mlruns"
-    train_path = "data/datasets/12_8_0_20_1.0/train/"
-    val_path = "data/datasets/12_8_0_20_1.0/val/"
-    test_path = "data/datasets/12_8_0_20_1.0/test/"
-
-    datasets = {"train": train_path, "val": val_path, "test": test_path}
+    dataset_directory = "data/datasets/12_8_0_20_1.0"
 
     # Set mlflow tracking uri so we can find the run results
     mlflow.set_tracking_uri(mlruns_path)
@@ -71,32 +66,45 @@ if __name__ == "__main__":
     recreate_directory(results_dir)
 
     metrics = {}
-    for dataset_split, dataset_directory in datasets.items():
+    for split in ["train", "val", "test"]:
+        split_directory = f"{dataset_directory}/{split}"
+        gfs_split_directory = f"{dataset_directory}/gfs/{split}"
         eval_paths = [
-            f"{dataset_directory}/{x}" for x in os.listdir(dataset_directory)
+            f"{split_directory}/{x}" for x in os.listdir(split_directory)
         ]
-        random.shuffle(eval_paths)
+        gfs_paths = [
+            f"{gfs_split_directory}/{x}"
+            for x in os.listdir(gfs_split_directory)
+        ]
+        # random.shuffle(eval_paths)
         eval_dataset = CustomGenerator(eval_paths, 1, shuffle=False)
+        gfs_dataset = CustomGenerator(gfs_paths, 1, shuffle=False)
 
         mae, _, mse = model.evaluate(eval_dataset)
-        metrics[dataset_split] = {"mae": mae, "mse": mse}
+        metrics[split] = {"mae": mae, "mse": mse}
 
         y_pred = model.predict(eval_dataset)
 
         Xs = []
         ys = []
+        gfss = []
         y_persists = []
         for k in tqdm(range(y_pred.shape[0])):
             X, y = eval_dataset.__getitem__(k)
+            _, gfs = gfs_dataset.__getitem__(k)
             X = X[0]
             y = y[0][:, :, :, 0]
+            gfs = gfs[0][:, :, :, 0]
+            y_persist = np.array([X[-1, :, :, 0] for i in range(8)])
 
             Xs.append(X)
             ys.append(y)
-            y_persists.append(np.array([X[-1, :, :, 0] for i in range(8)]))
+            gfss.append(gfs)
+            y_persists.append(y_persist)
 
         X = np.array(Xs)
         y = np.array(ys)
+        y_gfs = np.array(gfss)
         y_persist = np.array(y_persists)
 
         # Finding representative examples to plot
@@ -112,11 +120,11 @@ if __name__ == "__main__":
             "max_err": y_mse_sample_argsort[-1]
         }
         for k, v in err_samples.items():
-            plot_samples(X[v], y[v], y_pred[v], results_dir,
-                         f"{dataset_split}_{k}")
+            plot_samples(X[v], y[v], y_pred[v], results_dir, f"{split}_{k}")
 
         # Calculating mse metrics by lead time
         y_mse = np.mean((y - y_pred)**2, axis=(0, 2, 3)).reshape(-1)
+        y_gfs_mse = np.mean((y - y_gfs)**2, axis=(0, 2, 3)).reshape(-1)
         y_persist_mse = np.mean((y - y_persist)**2, axis=(0, 2, 3)).reshape(-1)
 
         x_plt = np.arange(y_mse.shape[0])
@@ -127,34 +135,33 @@ if __name__ == "__main__":
                 label="Our model",
                 marker="s",
                 c=CB_color_cycle[0])
+        ax.plot(x_plt, y_gfs_mse, label="GFS", marker="s", c=CB_color_cycle[1])
         ax.plot(x_plt,
                 y_persist_mse,
                 label="Persistence",
                 marker="s",
-                c=CB_color_cycle[1])
-        ax.set_title(f"Mean Squared Error by Lead Time ({dataset_split})")
+                c=CB_color_cycle[2])
+        ax.set_title(f"Mean Squared Error by Lead Time ({split})")
         ax.set_xlabel("Lead Time")
         ax.set_ylabel("MSE")
         ax.legend()
 
-        fig.savefig(f"{results_dir}/{dataset_split}_mse_by_lead_time.png")
+        fig.savefig(f"{results_dir}/{split}_mse_by_lead_time.png")
 
         # Calculating csi metrics my lead time
         for threshold in [0.125, 2, 5, 10]:
-            y_th = y > threshold
-            y_pred_th = y_pred > threshold
-            tp = np.count_nonzero(np.logical_and(y_th, y_pred_th),
-                                  axis=(0, 2, 3))
-            fp_fn = np.count_nonzero(np.logical_xor(y_th, y_pred_th),
-                                     axis=(0, 2, 3))
-            y_csi = tp / (tp + fp_fn)
-
-            y_persist_th = y_persist > threshold
-            tp = np.count_nonzero(np.logical_and(y_th, y_persist_th),
-                                  axis=(0, 2, 3))
-            fp_fn = np.count_nonzero(np.logical_xor(y_th, y_persist_th),
-                                     axis=(0, 2, 3))
-            y_persist_csi = tp / (tp + fp_fn)
+            y_csi = csi(y=y,
+                        y_pred=y_pred,
+                        threshold=threshold,
+                        axis=(0, 2, 3))
+            y_gfs_csi = csi(y=y,
+                            y_pred=y_gfs,
+                            threshold=threshold,
+                            axis=(0, 2, 3))
+            y_persist_csi = csi(y=y,
+                                y_pred=y_persist,
+                                threshold=threshold,
+                                axis=(0, 2, 3))
 
             x_plt = np.arange(y_csi.shape[0])
             fig, ax = plt.subplots(1, figsize=(10, 5))
@@ -166,21 +173,26 @@ if __name__ == "__main__":
                     c=CB_color_cycle[0])
 
             ax.plot(x_plt,
-                    y_persist_csi,
-                    label="Persistence",
+                    y_gfs_csi,
+                    label="GFS",
                     marker="s",
                     c=CB_color_cycle[1])
 
+            ax.plot(x_plt,
+                    y_persist_csi,
+                    label="Persistence",
+                    marker="s",
+                    c=CB_color_cycle[2])
+
             ax.set_title(
-                f"Critical Success Index by Lead Time at {threshold} mm per hr ({dataset_split})"
+                f"Critical Success Index by Lead Time at {threshold} mm per hr ({split})"
             )
             ax.set_xlabel("Lead Time")
             ax.set_ylabel("CSI")
             ax.legend()
 
             fig.savefig(
-                f"{results_dir}/{dataset_split}_csi_by_lead_time_{threshold}.png"
-            )
+                f"{results_dir}/{split}_csi_by_lead_time_{threshold}.png")
 
     with open(f"{results_dir}/metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
