@@ -198,7 +198,10 @@ def recreate_directory(directory: str):
 
 def plot_samples(X: np.ndarray, y: np.ndarray, y_hat: np.ndarray,
                  output_dir: str, file_name: str):
+    y[y < 0] = 0
     y_hat[y_hat < 0] = 0
+    vmin = np.min(np.hstack([y, y_hat]))
+    vmax = np.max(np.hstack([y, y_hat]))
     for x in ["input", "expected_output", "predicted_output", "comparison"]:
         os.makedirs(f"{output_dir}/{x}", exist_ok=True)
 
@@ -206,45 +209,48 @@ def plot_samples(X: np.ndarray, y: np.ndarray, y_hat: np.ndarray,
     fig, axs = plt.subplots(2, 6, figsize=(30, 5))
     for i in range(2):
         for j in range(6):
-            axs[i, j].imshow(X[i * 6 + j, :, :, 0])
+            axs[i, j].imshow(X[i * 6 + j, :, :, 0], vmin=vmin, vmax=vmax)
             axs[i, j].set_xlabel(f"t={i * 6 + j}")
 
     fig.tight_layout()
-    fig.savefig(f"{output_dir}/input/{file_name}.png")
+    fig.savefig(f"{output_dir}/input/{file_name}.png", bbox_inches="tight")
 
     # Expected output figures
     fig, axs = plt.subplots(2, 4, figsize=(25, 5))
     for i in range(2):
         for j in range(4):
-            axs[i, j].imshow(y[i * 4 + j, :, :])
+            axs[i, j].imshow(y[i * 4 + j, :, :], vmin=vmin, vmax=vmax)
             axs[i, j].set_xlabel(f"t={i * 4 + j}")
 
     fig.tight_layout()
-    fig.savefig(f"{output_dir}/expected_output/{file_name}.png")
+    fig.savefig(f"{output_dir}/expected_output/{file_name}.png",
+                bbox_inches="tight")
 
     # Predicted figures
     fig, axs = plt.subplots(2, 4, figsize=(25, 5))
 
     for i in range(2):
         for j in range(4):
-            axs[i, j].imshow(y_hat[i * 4 + j, :, :])
+            axs[i, j].imshow(y_hat[i * 4 + j, :, :], vmin=vmin, vmax=vmax)
             axs[i, j].set_xlabel(f"t={i * 4 + j}")
 
     fig.tight_layout()
-    fig.savefig(f"{output_dir}/predicted_output/{file_name}.png")
+    fig.savefig(f"{output_dir}/predicted_output/{file_name}.png",
+                bbox_inches="tight")
 
     # Comparison figures
     fig, axs = plt.subplots(2, 4, figsize=(25, 5))
     axs[0, 0].set_ylabel("y true")
     axs[1, 0].set_ylabel("y predicted")
     for j in range(4):
-        axs[0, j].imshow(y[j, :, :])
+        axs[0, j].imshow(y[j, :, :], vmin=vmin, vmax=vmax)
         axs[0, j].set_xlabel(f"t={j}")
-        axs[1, j].imshow(y_hat[j, :, :])
+        axs[1, j].imshow(y_hat[j, :, :], vmin=vmin, vmax=vmax)
         axs[1, j].set_xlabel(f"t={j}")
 
     fig.tight_layout()
-    fig.savefig(f"{output_dir}/comparison/{file_name}.png")
+    fig.savefig(f"{output_dir}/comparison/{file_name}.png",
+                bbox_inches="tight")
 
 
 def csi(y: np.ndarray,

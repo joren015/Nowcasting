@@ -67,6 +67,10 @@ if __name__ == "__main__":
 
     metrics = {}
     for split in ["train", "val", "test"]:
+        os.makedirs(f"{results_dir}/{split}")
+        for x in ["distribution", "mse", "csi"]:
+            os.makedirs(f"{results_dir}/{split}/{x}")
+
         split_directory = f"{dataset_directory}/{split}"
         gfs_split_directory = f"{dataset_directory}/gfs/{split}"
         eval_paths = [
@@ -76,15 +80,11 @@ if __name__ == "__main__":
             f"{gfs_split_directory}/{x}"
             for x in os.listdir(gfs_split_directory)
         ]
-        # random.shuffle(eval_paths)
         eval_dataset = CustomGenerator(eval_paths, 1, shuffle=False)
         gfs_dataset = CustomGenerator(gfs_paths, 1, shuffle=False)
 
-        mae, _, mse = model.evaluate(eval_dataset)
-        metrics[split] = {"mae": mae, "mse": mse}
-
+        # Getting inputs, outputs, and predictions (including gfs and persist) for all samples
         y_pred = model.predict(eval_dataset)
-
         Xs = []
         ys = []
         gfss = []
@@ -107,6 +107,60 @@ if __name__ == "__main__":
         y_gfs = np.array(gfss)
         y_persist = np.array(y_persists)
 
+        metrics[split] = {}
+        predictions = {
+            "y": y,
+            "y_pred": y_pred,
+            "y_gfs": y_gfs,
+            "y_persist": y_persist
+        }
+
+        # Plotting prediction distributions by pixel
+        for k, v in predictions.items():
+            fig, axs = plt.subplots(3, figsize=(8, 19))
+            vmin = np.min(v)
+            vmax = np.max(v)
+
+            pos0 = axs[0].imshow(np.mean(v, axis=(0, 1)), vmin=vmin, vmax=vmax)
+            axs[0].set_title(f"Average Rainfall ({k} {split})")
+            fig.colorbar(pos0,
+                         ax=axs[0],
+                         location="right",
+                         shrink=0.35,
+                         label="mm/hr")
+
+            pos1 = axs[1].imshow(np.std(v, axis=(0, 1)), vmin=vmin, vmax=vmax)
+            axs[1].set_title(f"Standard Deviation of Rainfall ({k} {split})")
+            fig.colorbar(pos1,
+                         ax=axs[1],
+                         location="right",
+                         shrink=0.35,
+                         label="mm/hr")
+
+            pos2 = axs[2].imshow(np.max(v, axis=(0, 1)), vmin=vmin, vmax=vmax)
+            axs[2].set_title(f"Maximum Rainfall ({k} {split})")
+            fig.colorbar(pos2,
+                         ax=axs[2],
+                         location="right",
+                         shrink=0.35,
+                         label="mm/hr")
+
+            fig.tight_layout(pad=-20)
+            fig.savefig(
+                f"{results_dir}/{split}/distribution/{split}_{k}_distribution_by_pixel.png",
+                bbox_inches="tight")
+
+        # Calculating metrics along all axes
+        for k, v in predictions.items():
+            metrics[split][f"{k}_mae"] = float(
+                np.mean(np.abs(y - v)).reshape(-1)[0])
+            metrics[split][f"{k}_mse"] = float(
+                np.mean((y - v)**2).reshape(-1)[0])
+
+            for threshold in [0.125, 2, 5, 10]:
+                metrics[split][f"{k}_csi_{threshold}"] = csi(
+                    y=y, y_pred=v, threshold=threshold, axis=(0, 1, 2, 3))
+
         # Finding representative examples to plot
         y_mse_sample = np.mean((y - y_pred)**2, axis=(1, 2, 3)).reshape(-1)
         y_mse_sample_argsort = np.argsort(y_mse_sample)
@@ -120,7 +174,51 @@ if __name__ == "__main__":
             "max_err": y_mse_sample_argsort[-1]
         }
         for k, v in err_samples.items():
-            plot_samples(X[v], y[v], y_pred[v], results_dir, f"{split}_{k}")
+            plot_samples(X[v], y[v], y_pred[v],
+                         f"{results_dir}/{split}/examples", f"{split}_{k}")
+
+        # Calculating mse metrics by pixel
+        mse_px = {}
+        for k, v in predictions.items():
+            mse_px[k] = np.mean((y - v)**2, axis=(0, 1))
+
+        vmin = np.min([x for x in mse_px.values()])
+        vmax = np.max([x for x in mse_px.values()])
+
+        for k, v in mse_px.items():
+            fig, ax = plt.subplots(1, figsize=(8, 19))
+            pos = ax.imshow(v, vmin=vmin, vmax=vmax)
+            ax.set_title(f"Mean Squared Error by Pixel ({k} {split})")
+            fig.colorbar(pos,
+                         ax=ax,
+                         location="right",
+                         shrink=0.13,
+                         label="MSE")
+            fig.tight_layout()
+            fig.savefig(
+                f"{results_dir}/{split}/mse/{split}_{k}_mse_by_pixel.png",
+                bbox_inches="tight")
+
+        # Calculating csi metrics by pixel
+        for threshold in [0.125, 2, 5, 10]:
+            csi_px = {}
+            for k, v in predictions.items():
+                csi_px = csi(y=y, y_pred=v, threshold=threshold, axis=(0, 1))
+
+                fig, ax = plt.subplots(1, figsize=(8, 19))
+                pos = ax.imshow(csi_px, vmin=0, vmax=1)
+                ax.set_title(
+                    f"Critical Success Index by Pixel at {threshold} mm/hr ({k} {split})"
+                )
+                fig.colorbar(pos,
+                             ax=ax,
+                             location="right",
+                             shrink=0.13,
+                             label="CSI")
+                fig.tight_layout()
+                fig.savefig(
+                    f"{results_dir}/{split}/csi/{split}_{k}_csi_by_pixel_{threshold}.png",
+                    bbox_inches="tight")
 
         # Calculating mse metrics by lead time
         y_mse = np.mean((y - y_pred)**2, axis=(0, 2, 3)).reshape(-1)
@@ -146,7 +244,8 @@ if __name__ == "__main__":
         ax.set_ylabel("MSE")
         ax.legend()
 
-        fig.savefig(f"{results_dir}/{split}_mse_by_lead_time.png")
+        fig.savefig(f"{results_dir}/{split}/mse/{split}_mse_by_lead_time.png",
+                    bbox_inches="tight")
 
         # Calculating csi metrics my lead time
         for threshold in [0.125, 2, 5, 10]:
@@ -185,14 +284,15 @@ if __name__ == "__main__":
                     c=CB_color_cycle[2])
 
             ax.set_title(
-                f"Critical Success Index by Lead Time at {threshold} mm per hr ({split})"
+                f"Critical Success Index by Lead Time at {threshold} mm/hr ({split})"
             )
             ax.set_xlabel("Lead Time")
             ax.set_ylabel("CSI")
             ax.legend()
 
             fig.savefig(
-                f"{results_dir}/{split}_csi_by_lead_time_{threshold}.png")
+                f"{results_dir}/{split}/csi/{split}_csi_by_lead_time_{threshold}.png",
+                bbox_inches="tight")
 
     with open(f"{results_dir}/metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
