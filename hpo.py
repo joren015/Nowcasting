@@ -154,8 +154,8 @@ if __name__ == "__main__":
         "dropout_rate": [0, 0.25, 0.5],
         "learning_rate": [1e-4, 1e-2, 1e-1],
         "batch_size": [4, 8],
-        "kgl_alpha": [0, 0.1, 0.25, 1],
-        "kgl_beta": [0, 0.1, 0.25, 1]
+        "kgl_alpha": [0.0, 0.1, 0.25, 1.0],
+        "kgl_beta": [0.0, 0.1, 0.25, 1.0]
     }
 
     study = optuna.create_study(
