@@ -139,7 +139,7 @@ class CustomGenerator(keras.utils.Sequence):
         return X, y
 
 
-def KGMeanSquaredErrorBase(y_true, y_pred, alpha: float = 0.1):
+def KGLossBase(y_true, y_pred, alpha: float = 0.1, beta: float = 0.1):
     """
     KGMeanSquaredErrorBase Knowledge guided mse
 
@@ -164,11 +164,20 @@ def KGMeanSquaredErrorBase(y_true, y_pred, alpha: float = 0.1):
     lt_zero_err = tf.cast(tf.divide(lt_zero_count, tf.size(y_pred)),
                           tf.float32)
     lt_zero_weighted_err = tf.cast(tf.multiply(alpha, lt_zero_err), tf.float16)
-    err = tf.add(mse, lt_zero_weighted_err)
+
+    y_th = y_true > 10
+    y_pred_th = y_pred > 10
+    tp = tf.math.count_nonzero(tf.math.logical_and(y_th, y_pred_th))
+    fp_fn = tf.math.count_nonzero(tf.math.logical_xor(y_th, y_pred_th))
+    csi = tf.divide(tp, tf.add(tf.add(tp, fp_fn), 1))
+    csi_err = tf.subtract(1.0, tf.cast(csi, tf.float32))
+    csi_weighted_err = tf.cast(tf.multiply(csi_err, beta), tf.float16)
+
+    err = tf.add(tf.add(mse, lt_zero_weighted_err), csi_weighted_err)
     return err
 
 
-def KGMeanSquaredError(alpha: float = 0.1):
+def KGLoss(alpha: float = 0.1, beta: float = 0.1):
     """
     KGMeanSquaredError Partial wrapper for Knowledge guided mse
 
@@ -184,7 +193,7 @@ def KGMeanSquaredError(alpha: float = 0.1):
     float
         loss/error value
     """
-    return partial(KGMeanSquaredErrorBase, alpha=alpha)
+    return partial(KGLossBase, alpha=alpha, beta=beta)
 
 
 def recreate_directory(directory: str):

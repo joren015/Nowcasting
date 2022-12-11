@@ -13,7 +13,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator, KGMeanSquaredError
+from nowcasting.utils import CustomGenerator, KGLoss
 
 seed = 42
 random.seed(seed)
@@ -27,22 +27,19 @@ def objective(trial):
     dropout_rate = trial.suggest_float("dropout_rate", 0.1, 0.75, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 8, step=4)
-    # loss_fn = trial.suggest_categorical("loss_fn", ["mse", "kgmse"])
-    # kgmse_alpha = trial.suggest_float("kgmse_alpha", 0.1, 1.0, step=0.1)
+    kgl_alpha = trial.suggest_float("kgl_alpha", 0.0, 1.0, step=0.1)
+    kgl_beta = trial.suggest_float("kgl_beta", 0.0, 1.0, step=0.1)
 
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
-    # test_directory = f"data/datasets/{args.dataset_directory}/test"
 
     train_paths = [
         f"{train_directory}/{x}" for x in os.listdir(train_directory)
     ]
     val_paths = [f"{val_directory}/{x}" for x in os.listdir(val_directory)]
-    # test_paths = [f"{test_directory}/{x}" for x in os.listdir(test_directory)]
 
     train_dataset = CustomGenerator(train_paths, batch_size)
     val_dataset = CustomGenerator(val_paths, batch_size)
-    # test_dataset = CustomGenerator(test_paths, batch_size)
 
     experiment = mlflow.get_experiment_by_name(study_experiment)
     if experiment is None:
@@ -58,8 +55,8 @@ def objective(trial):
                 "hpo_dropout_rate": dropout_rate,
                 "hpo_learning_rate": learning_rate,
                 "hpo_batch_size": batch_size,
-                # "hpo_loss_fn": loss_fn,
-                # "hpo_kgmse_alpha": kgmse_alpha
+                "hpo_kgl_alpha": kgl_alpha,
+                "hpo_kgl_beta": kgl_beta
             }
             print(params)
             mlflow.log_params(params)
@@ -71,7 +68,7 @@ def objective(trial):
                      dropout_rate=dropout_rate)
         model.summary()
 
-        loss = "mean_squared_error"
+        loss = KGLoss(alpha=kgl_alpha, beta=kgl_beta)
 
         model.compile(
             loss=loss,
@@ -103,8 +100,6 @@ def objective(trial):
             val_loss = np.min(results.history["val_loss"])
 
             model.load_weights(checkpoint_filepath)
-            # test_results = model.evaluate(test_dataset)
-            # print(f"TEST RESULTS: {test_results}")
             mlflow.log_artifact(checkpoint_filepath)
             return val_loss
         except Exception as e:
@@ -129,8 +124,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--experiment_prefix",
         type=str,
-        default="hpo_res_mse",
-        help="Prefix used to identify mlflow experiment, by default hpo_res_mse"
+        default="hpo_res_kgl",
+        help="Prefix used to identify mlflow experiment, by default hpo_res_kgl"
     )
 
     args = parser.parse_args()
@@ -158,8 +153,11 @@ if __name__ == "__main__":
         "num_filters_base": [4, 8],
         "dropout_rate": [0, 0.25, 0.5],
         "learning_rate": [1e-4, 1e-2, 1e-1],
-        "batch_size": [4, 8]
+        "batch_size": [4, 8],
+        "kgl_alpha": [0, 0.1, 0.25, 1],
+        "kgl_beta": [0, 0.1, 0.25, 1]
     }
+
     study = optuna.create_study(
         study_name=study_experiment,
         storage=storage,
