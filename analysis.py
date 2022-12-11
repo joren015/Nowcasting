@@ -85,6 +85,7 @@ if __name__ == "__main__":
 
         # Getting inputs, outputs, and predictions (including gfs and persist) for all samples
         y_pred = model.predict(eval_dataset)
+        y_pred[y_pred < 0] = 0
         Xs = []
         ys = []
         gfss = []
@@ -296,3 +297,5 @@ if __name__ == "__main__":
 
     with open(f"{results_dir}/metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
+
+    print("Done")
