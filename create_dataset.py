@@ -1,13 +1,12 @@
 import argparse
 import os
-import re
 from shutil import rmtree
 
 import numpy as np
-import scipy
-from tqdm import tqdm
 
-from nowcasting.utils import sliding_window_expansion
+from nowcasting.utils import (create_samples_from_mat_files,
+                              recreate_directory, sliding_window_expansion,
+                              write_samples_to_npy)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -42,50 +41,20 @@ if __name__ == "__main__":
         help=
         "Number of timesteps to use to determine the start of the next input and target pair. By default 20"
     )
-    # parser.add_argument("--sample_ratio",
-    #                     type=float,
-    #                     default=1.0,
-    #                     help="Percentage of results to return. By default 1.0")
 
     args = parser.parse_args()
 
+    # Train and validation dataset
     mat_path = "/panfs/jay/groups/6/csci8523/rahim035"
-    mat_files = [
-        f"{mat_path}/{x}" for x in os.listdir(mat_path)
-        if re.match(r"20.*-S.*\.mat", x)
-    ]
-    mat_files.sort()
+    Xs, ys, gfss = create_samples_from_mat_files(mat_path)
 
-    Xs = []
-    ys = []
-    gfss = []
-    print("Loading .mat files")
-    for mat_file in tqdm(mat_files):
-        mat = scipy.io.loadmat(mat_file)
-        mat_shape = mat["X"]["imerg"][0][0].shape
-        x = np.array([
-            mat["X"][x][0][0] for x in ["imerg", "gfs_v", "gfs_tpw", "gfs_u"]
-        ])
-        x = np.moveaxis(x, 0, 2)
-        Xs.append(x)
-        ys.append(mat["X"]["imerg"][0][0].reshape(
-            (mat_shape[0], mat_shape[1], 1)))
-        gfss.append(mat["X"]["gfs_pr"][0][0].reshape(
-            (mat_shape[0], mat_shape[1], 1)))
-
-    Xs = np.array(Xs)
-    ys = np.array(ys)
-    gfss = np.array(gfss)
-
-    X, y = sliding_window_expansion(
-        Xs,
-        ys,
-        input_window_size=args.input_window_size,
-        target_window_size=args.target_window_size,
-        target_offset=args.target_offset,
-        step=args.step,
-        # sample_ratio=args.sample_ratio)
-        sample_ratio=1)
+    X, y = sliding_window_expansion(Xs,
+                                    ys,
+                                    input_window_size=args.input_window_size,
+                                    target_window_size=args.target_window_size,
+                                    target_offset=args.target_offset,
+                                    step=args.step,
+                                    sample_ratio=1)
     X_gfs, gfs = sliding_window_expansion(
         Xs,
         gfss,
@@ -93,7 +62,6 @@ if __name__ == "__main__":
         target_window_size=args.target_window_size,
         target_offset=args.target_offset,
         step=args.step,
-        # sample_ratio=args.sample_ratio)
         sample_ratio=1)
 
     swe_test = np.all(X == X_gfs)
@@ -141,21 +109,61 @@ if __name__ == "__main__":
         f.write(str(s))
 
     print("Writing train dataset to disk")
-    for i in tqdm(range(X_train.shape[0])):
-        arr = np.array([X_train[i], y_train[i]], dtype=object)
-        np.save(f"{train_directory}/{i}.npy", arr)
+    write_samples_to_npy(X=X_train, y=y_train, write_directory=train_directory)
 
     print("Writing validation dataset to disk")
-    for i in tqdm(range(X_val.shape[0])):
-        arr = np.array([X_val[i], y_val[i]], dtype=object)
-        np.save(f"{val_directory}/{i}.npy", arr)
+    write_samples_to_npy(X=X_val, y=y_val, write_directory=val_directory)
 
     print("Writing gfs train dataset to disk")
-    for i in tqdm(range(X_train.shape[0])):
-        arr = np.array([X_train[i], gfs_train[i]], dtype=object)
-        np.save(f"{gfs_train_directory}/{i}.npy", arr)
+    write_samples_to_npy(X=X_train,
+                         y=gfs_train,
+                         write_directory=gfs_train_directory)
 
     print("Writing gfs validation dataset to disk")
-    for i in tqdm(range(X_val.shape[0])):
-        arr = np.array([X_val[i], gfs_val[i]], dtype=object)
-        np.save(f"{gfs_val_directory}/{i}.npy", arr)
+    write_samples_to_npy(X=X_val, y=gfs_val, write_directory=gfs_val_directory)
+
+    # Test dataset
+    mat_path = "/panfs/jay/groups/6/csci8523/rahim035/testset"
+    Xs, ys, gfss = create_samples_from_mat_files(mat_path)
+
+    X, y = sliding_window_expansion(Xs,
+                                    ys,
+                                    input_window_size=args.input_window_size,
+                                    target_window_size=args.target_window_size,
+                                    target_offset=args.target_offset,
+                                    step=args.step,
+                                    sample_ratio=1)
+    X_gfs, gfs = sliding_window_expansion(
+        Xs,
+        gfss,
+        input_window_size=args.input_window_size,
+        target_window_size=args.target_window_size,
+        target_offset=args.target_offset,
+        step=args.step,
+        sample_ratio=1)
+
+    swe_test = np.all(X == X_gfs)
+    assert swe_test
+    print(swe_test)
+
+    sub_directory = f"{args.input_window_size}_{args.target_window_size}_{args.target_offset}_{args.step}_1.0"
+    test_directory = f"data/datasets/{sub_directory}/test"
+    gfs_directory = f"data/datasets/{sub_directory}/gfs/test"
+
+    with open(f"data/datasets/{sub_directory}/mean.txt", "r") as f:
+        mu = float(f.read())
+    with open(f"data/datasets/{sub_directory}/std.txt", "r") as f:
+        s = float(f.read())
+
+    X = (X - mu) / s
+
+    print("Features", X.shape, "Labels", X.shape)
+
+    for dir in [test_directory, gfs_directory]:
+        recreate_directory(dir)
+
+    print("Writing test dataset to disk")
+    write_samples_to_npy(X=X, y=y, write_directory=test_directory)
+
+    print("Writing gfs test dataset to disk")
+    write_samples_to_npy(X=X, y=gfs, write_directory=gfs_directory)

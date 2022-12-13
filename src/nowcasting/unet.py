@@ -54,7 +54,7 @@ def unet_up(x0: Any,
             c0: Any,
             num_filters: int = 3,
             init_kernel_size: Tuple[int] = (2, 1, 1),
-            layer_batch_id: int = 1):
+            layer_batch_id: int = 1) -> Any:
     """
     unet_up Dimensionality expansion segment of unet structure
 
@@ -116,7 +116,9 @@ def unet_up(x0: Any,
     return c1
 
 
-def unet_core(x0: Any, num_filters_base: int = 8, dropout_rate: float = 0.2):
+def unet_core(x0: Any,
+              num_filters_base: int = 8,
+              dropout_rate: float = 0.2) -> Any:
     """
     unet_core Core unet structure
 
@@ -193,7 +195,7 @@ def unet_core(x0: Any, num_filters_base: int = 8, dropout_rate: float = 0.2):
 
 def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
          num_filters_base: int = 8,
-         dropout_rate: float = 0.2):
+         dropout_rate: float = 0.2) -> Any:
     """
     res1 Unet structure for square input shape
 
@@ -231,7 +233,7 @@ def res1(input_shape: Tuple[int] = (12, 120, 120, 3),
 
 def res2(input_shape: Tuple[int] = (12, 256, 620, 4),
          num_filters_base: int = 8,
-         dropout_rate: float = 0.2):
+         dropout_rate: float = 0.2) -> Any:
     """
     res1 Unet structure for rectangular input shape
 

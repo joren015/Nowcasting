@@ -1,5 +1,6 @@
 import os
 import random
+import re
 from functools import partial
 from shutil import rmtree
 from typing import List, Tuple
@@ -7,7 +8,9 @@ from typing import List, Tuple
 import keras
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy
 import tensorflow as tf
+from tqdm import tqdm
 
 
 def sliding_window_expansion(
@@ -139,7 +142,7 @@ class CustomGenerator(keras.utils.Sequence):
         return X, y
 
 
-def KGLossBase(y_true, y_pred, alpha: float = 0.1, beta: float = 0.1):
+def KGLossBase(y_true, y_pred, alpha: float = 0.1, beta: float = 0.1) -> float:
     """
     KGMeanSquaredErrorBase Knowledge guided mse
 
@@ -177,7 +180,7 @@ def KGLossBase(y_true, y_pred, alpha: float = 0.1, beta: float = 0.1):
     return err
 
 
-def KGLoss(alpha: float = 0.1, beta: float = 0.1):
+def KGLoss(alpha: float = 0.1, beta: float = 0.1) -> partial:
     """
     KGMeanSquaredError Partial wrapper for Knowledge guided mse
 
@@ -190,13 +193,21 @@ def KGLoss(alpha: float = 0.1, beta: float = 0.1):
 
     Returns
     -------
-    float
-        loss/error value
+    partial
+        Partial function used to compute loss in neural network training
     """
     return partial(KGLossBase, alpha=alpha, beta=beta)
 
 
-def recreate_directory(directory: str):
+def recreate_directory(directory: str) -> None:
+    """
+    recreate_directory Function used to delete and recreate a directory
+
+    Parameters
+    ----------
+    directory : str
+        Path to target directory
+    """
     try:
         rmtree(directory)
     except Exception as e:
@@ -206,7 +217,25 @@ def recreate_directory(directory: str):
 
 
 def plot_samples(X: np.ndarray, y: np.ndarray, y_hat: np.ndarray,
-                 output_dir: str, file_name: str):
+                 output_dir: str, file_name: str) -> None:
+    """
+    plot_samples Use to plot several samples
+
+    Plot a set of input, expected output, predicted output, and comparrison samples 
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input
+    y : np.ndarray
+        Expected output
+    y_hat : np.ndarray
+        Predicted output
+    output_dir : str
+        Directory to save plots
+    file_name : str
+        Name to use for each file
+    """
     y[y < 0] = 0
     y_hat[y_hat < 0] = 0
     vmin = np.min(np.hstack([y, y_hat]))
@@ -265,9 +294,94 @@ def plot_samples(X: np.ndarray, y: np.ndarray, y_hat: np.ndarray,
 def csi(y: np.ndarray,
         y_pred: np.ndarray,
         threshold: float = 0.125,
-        axis: Tuple[int] = (0, 2, 3)):
+        axis: Tuple[int] = (0, 2, 3)) -> float:
+    """
+    csi Critical success index
+
+    Compute the critical success index for a given output and prediction along one or more axes
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Output
+    y_pred : np.ndarray
+        Prediction
+    threshold : float, optional
+        Threshold to use when calculating csi, by default 0.125
+    axis : Tuple[int], optional
+        Axis to use when calculating csi, by default (0, 2, 3)
+
+    Returns
+    -------
+    float
+        Critical success index
+    """
     y_th = y > threshold
     y_pred_th = y_pred > threshold
     tp = np.count_nonzero(np.logical_and(y_th, y_pred_th), axis=axis)
     fp_fn = np.count_nonzero(np.logical_xor(y_th, y_pred_th), axis=axis)
     return tp / (tp + fp_fn)
+
+
+def create_samples_from_mat_files(
+        mat_path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    create_samples_from_mat_files Create a set of input, output, and gfs samples from mat files
+
+    Parameters
+    ----------
+    mat_path : str
+        Path to directory containing mat files
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray, np.ndarray]
+        input, output, and gfs samples as numpy arrays
+    """
+    mat_files = [
+        f"{mat_path}/{x}" for x in os.listdir(mat_path)
+        if re.match(r"20.*-S.*\.mat", x)
+    ]
+    mat_files.sort()
+
+    Xs = []
+    ys = []
+    gfss = []
+    print("Loading .mat files")
+    for mat_file in tqdm(mat_files):
+        mat = scipy.io.loadmat(mat_file)
+        mat_shape = mat["X"]["imerg"][0][0].shape
+        x = np.array([
+            mat["X"][x][0][0] for x in ["imerg", "gfs_v", "gfs_tpw", "gfs_u"]
+        ])
+        x = np.moveaxis(x, 0, 2)
+        Xs.append(x)
+        ys.append(mat["X"]["imerg"][0][0].reshape(
+            (mat_shape[0], mat_shape[1], 1)))
+        gfss.append(mat["X"]["gfs_pr"][0][0].reshape(
+            (mat_shape[0], mat_shape[1], 1)))
+
+    Xs = np.array(Xs)
+    ys = np.array(ys)
+    gfss = np.array(gfss)
+
+    return Xs, ys, gfss
+
+
+def write_samples_to_npy(X: np.ndarray, y: np.ndarray,
+                         write_directory: str) -> None:
+    """
+    write_samples_to_npy Join and write samples of input and outputs to .npy files
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Input array
+    y : np.ndarray
+        Output array
+    write_directory : str
+        Directory where files will be written
+    """
+    for i in tqdm(range(X.shape[0])):
+        arr = np.array([X[i], y[i]], dtype=object)
+        np.save(f"{write_directory}/{i}.npy", arr)

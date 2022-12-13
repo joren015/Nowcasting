@@ -35,7 +35,7 @@ if __name__ == "__main__":
     mlflow.set_tracking_uri(mlruns_path)
 
     # Get dataframe of mlflow runs by experiment name
-    experiment_name = "hpo_res_mse_12_8_0_20_1.0"
+    experiment_name = "hpo_res_kgl_12_8_0_20_1.0"
     experiment_id = mlflow.get_experiment_by_name(
         experiment_name).experiment_id
 
