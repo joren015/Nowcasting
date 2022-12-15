@@ -35,7 +35,7 @@ if __name__ == "__main__":
     mlflow.set_tracking_uri(mlruns_path)
 
     # Get dataframe of mlflow runs by experiment name
-    experiment_name = "hpo_res_kgl_12_8_0_20_1.0"
+    experiment_name = "hpo_res_mse_12_8_0_20_1.0"
     experiment_id = mlflow.get_experiment_by_name(
         experiment_name).experiment_id
 
@@ -158,6 +158,13 @@ if __name__ == "__main__":
             metrics[split][f"{k}_mse"] = float(
                 np.mean((y - v)**2).reshape(-1)[0])
 
+            y_flat = y.flatten()
+            v_flat = v.flatten()
+            flat_nonzero_mask = y_flat > 0
+            metrics[split][f"{k}_mse_nonzero"] = float(
+                np.mean((y_flat[flat_nonzero_mask] -
+                         v_flat[flat_nonzero_mask])**2).reshape(-1)[0])
+
             for threshold in [0.125, 2, 5, 10]:
                 metrics[split][f"{k}_csi_{threshold}"] = csi(
                     y=y, y_pred=v, threshold=threshold, axis=(0, 1, 2, 3))
@@ -222,21 +229,36 @@ if __name__ == "__main__":
                     bbox_inches="tight")
 
         # Calculating mse metrics by lead time
-        y_mse = np.mean((y - y_pred)**2, axis=(0, 2, 3)).reshape(-1)
-        y_gfs_mse = np.mean((y - y_gfs)**2, axis=(0, 2, 3)).reshape(-1)
-        y_persist_mse = np.mean((y - y_persist)**2, axis=(0, 2, 3)).reshape(-1)
+        mse_lt = {}
+        for k, v in predictions.items():
+            mse = np.mean((y - v)**2, axis=(0, 2, 3)).reshape(-1)
+            mse_nonzeros = []
+            for i in range(8):
+                yi = y[:, i, :, :].flatten()
+                vi = v[:, i, :, :].flatten()
+                flat_nonzero_mask = yi > 0
+                mse_nonzeros.append(
+                    float(
+                        np.mean((yi[flat_nonzero_mask] -
+                                 vi[flat_nonzero_mask])**2).reshape(-1)[0]))
 
-        x_plt = np.arange(y_mse.shape[0])
+            mse_lt[k] = {"zeros": mse, "nonzeros": np.array(mse_nonzeros)}
+
+        x_plt = np.arange(mse_lt["y_pred"]["zeros"].shape[0])
         fig, ax = plt.subplots(1, figsize=(10, 5))
 
         ax.plot(x_plt,
-                y_mse,
+                mse_lt["y_pred"]["zeros"],
                 label="Our model",
                 marker="s",
                 c=CB_color_cycle[0])
-        ax.plot(x_plt, y_gfs_mse, label="GFS", marker="s", c=CB_color_cycle[1])
         ax.plot(x_plt,
-                y_persist_mse,
+                mse_lt["y_gfs"]["zeros"],
+                label="GFS",
+                marker="s",
+                c=CB_color_cycle[1])
+        ax.plot(x_plt,
+                mse_lt["y_persist"]["zeros"],
                 label="Persistence",
                 marker="s",
                 c=CB_color_cycle[2])
@@ -247,6 +269,32 @@ if __name__ == "__main__":
 
         fig.savefig(f"{results_dir}/{split}/mse/{split}_mse_by_lead_time.png",
                     bbox_inches="tight")
+
+        fig, ax = plt.subplots(1, figsize=(10, 5))
+        ax.plot(x_plt,
+                mse_lt["y_pred"]["nonzeros"],
+                label="Our model",
+                marker="s",
+                c=CB_color_cycle[0])
+        ax.plot(x_plt,
+                mse_lt["y_gfs"]["nonzeros"],
+                label="GFS",
+                marker="s",
+                c=CB_color_cycle[1])
+        ax.plot(x_plt,
+                mse_lt["y_persist"]["nonzeros"],
+                label="Persistence",
+                marker="s",
+                c=CB_color_cycle[2])
+        ax.set_title(
+            f"Mean Squared Error by Lead Time for Nonzero Values ({split})")
+        ax.set_xlabel("Lead Time")
+        ax.set_ylabel("MSE")
+        ax.legend()
+
+        fig.savefig(
+            f"{results_dir}/{split}/mse/{split}_mse_by_lead_time_nonzero.png",
+            bbox_inches="tight")
 
         # Calculating csi metrics my lead time
         for threshold in [0.125, 2, 5, 10]:
