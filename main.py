@@ -56,7 +56,7 @@ if __name__ == "__main__":
         help="Prefix used to identify mlflow experiment, by default res2_kgl")
     parser.add_argument("--early_stopping",
                         type=bool,
-                        default=False,
+                        default=True,
                         help="Option to use early stopping, by default True")
     parser.add_argument(
         "--kgl_alpha",
@@ -158,7 +158,7 @@ if __name__ == "__main__":
             print("Starting fit")
             results = model.fit(train_dataset,
                                 batch_size=args.batch_size,
-                                epochs=1,
+                                epochs=128,
                                 callbacks=callbacks,
                                 verbose=1,
                                 validation_data=val_dataset)
