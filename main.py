@@ -1,6 +1,7 @@
 import argparse
 import os
 import random
+import tempfile
 
 import keras
 import mlflow
@@ -10,7 +11,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator, KGLoss
+from nowcasting.utils import CustomGenerator, KGLoss, model_analysis
 
 seed = 42
 random.seed(seed)
@@ -157,7 +158,7 @@ if __name__ == "__main__":
             print("Starting fit")
             results = model.fit(train_dataset,
                                 batch_size=args.batch_size,
-                                epochs=128,
+                                epochs=1,
                                 callbacks=callbacks,
                                 verbose=1,
                                 validation_data=val_dataset)
@@ -166,6 +167,15 @@ if __name__ == "__main__":
 
             model.load_weights(checkpoint_filepath)
             mlflow.log_artifact(checkpoint_filepath)
+
+            os.makedirs("data/tmp", exist_ok=True)
+            with tempfile.TemporaryDirectory(dir="data/tmp") as tmpdirname:
+                model_analysis(
+                    model,
+                    results_dir=tmpdirname,
+                    dataset_directory=f"data/datasets/{args.dataset_directory}"
+                )
+                mlflow.log_artifacts(tmpdirname, "analysis")
 
         except Exception as e:
             print(e)

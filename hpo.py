@@ -2,6 +2,7 @@ import argparse
 import gc
 import os
 import random
+import tempfile
 import time
 
 import keras
@@ -13,7 +14,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator, KGLoss
+from nowcasting.utils import CustomGenerator, KGLoss, model_analysis
 
 seed = 42
 random.seed(seed)
@@ -27,8 +28,8 @@ def objective(trial):
     dropout_rate = trial.suggest_float("dropout_rate", 0.1, 0.75, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 8, step=4)
-    kgl_alpha = trial.suggest_float("kgl_alpha", 0.0, 1.0, step=0.1)
-    kgl_beta = trial.suggest_float("kgl_beta", 0.0, 1.0, step=0.1)
+    kgl_alpha = trial.suggest_float("kgl_alpha", 0.0, 1.0, step=0.25)
+    kgl_beta = trial.suggest_float("kgl_beta", 0.0, 1.0, step=0.25)
 
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
@@ -101,6 +102,16 @@ def objective(trial):
 
             model.load_weights(checkpoint_filepath)
             mlflow.log_artifact(checkpoint_filepath)
+
+            os.makedirs("data/tmp", exist_ok=True)
+            with tempfile.TemporaryDirectory(dir="data/tmp") as tmpdirname:
+                model_analysis(
+                    model,
+                    results_dir=tmpdirname,
+                    dataset_directory=f"data/datasets/{args.dataset_directory}"
+                )
+                mlflow.log_artifacts(tmpdirname, "analysis")
+
             return val_loss
         except Exception as e:
             print(e)
@@ -154,8 +165,8 @@ if __name__ == "__main__":
         "dropout_rate": [0, 0.25, 0.5],
         "learning_rate": [1e-4, 1e-2, 1e-1],
         "batch_size": [4, 8],
-        "kgl_alpha": [0.0, 0.1, 0.25, 1.0],
-        "kgl_beta": [0.0, 0.1, 0.25, 1.0]
+        "kgl_alpha": [0.0, 0.25, 0.5, 0.75, 1.0],
+        "kgl_beta": [0.0, 0.25, 0.5, 0.75, 1.0]
     }
 
     study = optuna.create_study(

@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import re
@@ -11,6 +12,11 @@ import numpy as np
 import scipy
 import tensorflow as tf
 from tqdm import tqdm
+
+CB_color_cycle = [
+    '#377eb8', '#ff7f00', '#4daf4a', '#f781bf', '#a65628', '#984ea3',
+    '#999999', '#e41a1c', '#dede00'
+]
 
 
 def sliding_window_expansion(
@@ -385,3 +391,340 @@ def write_samples_to_npy(X: np.ndarray, y: np.ndarray,
     for i in tqdm(range(X.shape[0])):
         arr = np.array([X[i], y[i]], dtype=object)
         np.save(f"{write_directory}/{i}.npy", arr)
+
+
+def model_analysis(model, results_dir: str, dataset_directory: str):
+    metrics = {}
+    for split in ["train", "val", "test"]:
+        os.makedirs(f"{results_dir}/{split}")
+        for x in ["distribution", "mse", "csi"]:
+            os.makedirs(f"{results_dir}/{split}/{x}")
+
+        split_directory = f"{dataset_directory}/{split}"
+        gfs_split_directory = f"{dataset_directory}/gfs/{split}"
+        eval_paths = [
+            f"{split_directory}/{x}" for x in os.listdir(split_directory)
+        ]
+        gfs_paths = [
+            f"{gfs_split_directory}/{x}"
+            for x in os.listdir(gfs_split_directory)
+        ]
+        eval_dataset = CustomGenerator(eval_paths, 1, shuffle=False)
+        gfs_dataset = CustomGenerator(gfs_paths, 1, shuffle=False)
+
+        # Getting inputs, outputs, and predictions (including gfs and persist) for all samples
+        y_pred = model.predict(eval_dataset)
+        y_pred[y_pred < 0] = 0
+        Xs = []
+        ys = []
+        gfss = []
+        y_persists = []
+        for k in tqdm(range(y_pred.shape[0])):
+            X, y = eval_dataset.__getitem__(k)
+            _, gfs = gfs_dataset.__getitem__(k)
+            X = X[0]
+            y = y[0][:, :, :, 0]
+            gfs = gfs[0][:, :, :, 0]
+            y_persist = np.array([X[-1, :, :, 0] for i in range(8)])
+
+            Xs.append(X)
+            ys.append(y)
+            gfss.append(gfs)
+            y_persists.append(y_persist)
+
+        X = np.array(Xs)
+        y = np.array(ys)
+        y_gfs = np.array(gfss)
+        y_persist = np.array(y_persists)
+
+        metrics[split] = {}
+        predictions = {
+            "y": y,
+            "y_pred": y_pred,
+            "y_gfs": y_gfs,
+            "y_persist": y_persist
+        }
+
+        # Plotting prediction distributions by pixel
+        for k, v in predictions.items():
+            fig, axs = plt.subplots(3, figsize=(8, 19))
+            vmin = np.min(v)
+            vmax = np.max(v)
+
+            pos0 = axs[0].imshow(np.mean(v, axis=(0, 1)), vmin=vmin, vmax=vmax)
+            axs[0].set_title(f"Average Rainfall ({k} {split})")
+            fig.colorbar(pos0,
+                         ax=axs[0],
+                         location="right",
+                         shrink=0.35,
+                         label="mm/hr")
+
+            pos1 = axs[1].imshow(np.std(v, axis=(0, 1)), vmin=vmin, vmax=vmax)
+            axs[1].set_title(f"Standard Deviation of Rainfall ({k} {split})")
+            fig.colorbar(pos1,
+                         ax=axs[1],
+                         location="right",
+                         shrink=0.35,
+                         label="mm/hr")
+
+            pos2 = axs[2].imshow(np.max(v, axis=(0, 1)), vmin=vmin, vmax=vmax)
+            axs[2].set_title(f"Maximum Rainfall ({k} {split})")
+            fig.colorbar(pos2,
+                         ax=axs[2],
+                         location="right",
+                         shrink=0.35,
+                         label="mm/hr")
+
+            fig.tight_layout(pad=-20)
+            fig.savefig(
+                f"{results_dir}/{split}/distribution/{split}_{k}_distribution_by_pixel.png",
+                bbox_inches="tight")
+
+        # Calculating metrics along all axes
+        for k, v in predictions.items():
+            metrics[f"{split}_{k}_mae"] = float(
+                np.mean(np.abs(y - v)).reshape(-1)[0])
+            metrics[f"{split}_{k}_mse"] = float(
+                np.mean((y - v)**2).reshape(-1)[0])
+
+            y_flat = y.flatten()
+            v_flat = v.flatten()
+            flat_nonzero_mask = y_flat > 0
+            metrics[f"{split}_{k}_mse_nonzero"] = float(
+                np.mean((y_flat[flat_nonzero_mask] -
+                         v_flat[flat_nonzero_mask])**2).reshape(-1)[0])
+
+            for threshold in [0.125, 2, 5, 10]:
+                metrics[f"{split}_{k}_csi_{threshold}"] = csi(
+                    y=y, y_pred=v, threshold=threshold, axis=(0, 1, 2, 3))
+
+        # Finding representative examples to plot
+        y_mse_sample = np.mean((y - y_pred)**2, axis=(1, 2, 3)).reshape(-1)
+        y_mse_sample_argsort = np.argsort(y_mse_sample)
+        n = y_mse_sample_argsort.shape[0]
+
+        err_samples = {
+            "min_err": y_mse_sample_argsort[0],
+            "low_err": y_mse_sample_argsort[n // 4],
+            "mid_err": y_mse_sample_argsort[n // 2],
+            "high_err": y_mse_sample_argsort[(n // 4) * 3],
+            "max_err": y_mse_sample_argsort[-1]
+        }
+        for k, v in err_samples.items():
+            plot_samples(X[v], y[v], y_pred[v],
+                         f"{results_dir}/{split}/examples", f"{split}_{k}")
+
+        # Calculating mse metrics by pixel
+        mse_px = {}
+        for k, v in predictions.items():
+            mse_px[k] = np.mean((y - v)**2, axis=(0, 1))
+
+        vmin = np.min([x for x in mse_px.values()])
+        vmax = np.max([x for x in mse_px.values()])
+
+        for k, v in mse_px.items():
+            fig, ax = plt.subplots(1, figsize=(8, 19))
+            pos = ax.imshow(v, vmin=vmin, vmax=vmax)
+            ax.set_title(f"Mean Squared Error by Pixel ({k} {split})")
+            fig.colorbar(pos,
+                         ax=ax,
+                         location="right",
+                         shrink=0.13,
+                         label="MSE")
+            fig.tight_layout()
+            fig.savefig(
+                f"{results_dir}/{split}/mse/{split}_{k}_mse_by_pixel.png",
+                bbox_inches="tight")
+
+        # Calculating csi metrics by pixel
+        for threshold in [0.125, 2, 5, 10]:
+            csi_px = {}
+            for k, v in predictions.items():
+                csi_px = csi(y=y, y_pred=v, threshold=threshold, axis=(0, 1))
+
+                fig, ax = plt.subplots(1, figsize=(8, 19))
+                pos = ax.imshow(csi_px, vmin=0, vmax=1)
+                ax.set_title(
+                    f"Critical Success Index by Pixel at {threshold} mm/hr ({k} {split})"
+                )
+                fig.colorbar(pos,
+                             ax=ax,
+                             location="right",
+                             shrink=0.13,
+                             label="CSI")
+                fig.tight_layout()
+                fig.savefig(
+                    f"{results_dir}/{split}/csi/{split}_{k}_csi_by_pixel_{threshold}.png",
+                    bbox_inches="tight")
+
+        # Calculating mse metrics by lead time
+        mse_lt = {}
+        for k, v in predictions.items():
+            mse = np.mean((y - v)**2, axis=(0, 2, 3)).reshape(-1)
+            mse_nonzeros = []
+            for i in range(8):
+                yi = y[:, i, :, :].flatten()
+                vi = v[:, i, :, :].flatten()
+                flat_nonzero_mask = yi > 0
+                mse_nonzeros.append(
+                    float(
+                        np.mean((yi[flat_nonzero_mask] -
+                                 vi[flat_nonzero_mask])**2).reshape(-1)[0]))
+
+            mse_lt[k] = {"zeros": mse, "nonzeros": np.array(mse_nonzeros)}
+
+        x_plt = np.arange(mse_lt["y_pred"]["zeros"].shape[0])
+        fig, ax = plt.subplots(1, figsize=(10, 5))
+
+        ax.plot(x_plt,
+                mse_lt["y_pred"]["zeros"],
+                label="Our model",
+                marker="s",
+                c=CB_color_cycle[0])
+        ax.plot(x_plt,
+                mse_lt["y_gfs"]["zeros"],
+                label="GFS",
+                marker="s",
+                c=CB_color_cycle[1])
+        ax.plot(x_plt,
+                mse_lt["y_persist"]["zeros"],
+                label="Persistence",
+                marker="s",
+                c=CB_color_cycle[2])
+        ax.set_title(f"Mean Squared Error by Lead Time ({split})")
+        ax.set_xlabel("Lead Time")
+        ax.set_ylabel("MSE")
+        ax.legend()
+
+        fig.savefig(f"{results_dir}/{split}/mse/{split}_mse_by_lead_time.png",
+                    bbox_inches="tight")
+
+        fig, ax = plt.subplots(1, figsize=(10, 5))
+        ax.plot(x_plt,
+                mse_lt["y_pred"]["nonzeros"],
+                label="Our model",
+                marker="s",
+                c=CB_color_cycle[0])
+        ax.plot(x_plt,
+                mse_lt["y_gfs"]["nonzeros"],
+                label="GFS",
+                marker="s",
+                c=CB_color_cycle[1])
+        ax.plot(x_plt,
+                mse_lt["y_persist"]["nonzeros"],
+                label="Persistence",
+                marker="s",
+                c=CB_color_cycle[2])
+        ax.set_title(
+            f"Mean Squared Error by Lead Time for Nonzero Values ({split})")
+        ax.set_xlabel("Lead Time")
+        ax.set_ylabel("MSE")
+        ax.legend()
+
+        fig.savefig(
+            f"{results_dir}/{split}/mse/{split}_mse_by_lead_time_nonzero.png",
+            bbox_inches="tight")
+
+        # Calculating csi metrics my lead time
+        for threshold in [0.125, 2, 5, 10]:
+            y_csi = csi(y=y,
+                        y_pred=y_pred,
+                        threshold=threshold,
+                        axis=(0, 2, 3))
+            y_gfs_csi = csi(y=y,
+                            y_pred=y_gfs,
+                            threshold=threshold,
+                            axis=(0, 2, 3))
+            y_persist_csi = csi(y=y,
+                                y_pred=y_persist,
+                                threshold=threshold,
+                                axis=(0, 2, 3))
+
+            x_plt = np.arange(y_csi.shape[0])
+            fig, ax = plt.subplots(1, figsize=(10, 5))
+
+            ax.plot(x_plt,
+                    y_csi,
+                    label="Our model",
+                    marker="s",
+                    c=CB_color_cycle[0])
+
+            ax.plot(x_plt,
+                    y_gfs_csi,
+                    label="GFS",
+                    marker="s",
+                    c=CB_color_cycle[1])
+
+            ax.plot(x_plt,
+                    y_persist_csi,
+                    label="Persistence",
+                    marker="s",
+                    c=CB_color_cycle[2])
+
+            ax.set_title(
+                f"Critical Success Index by Lead Time at {threshold} mm/hr ({split})"
+            )
+            ax.set_xlabel("Lead Time")
+            ax.set_ylabel("CSI")
+            ax.legend()
+
+            fig.savefig(
+                f"{results_dir}/{split}/csi/{split}_csi_by_lead_time_{threshold}.png",
+                bbox_inches="tight")
+
+        for threshold in [0.125, 2, 5, 10]:
+            y_csi = csi(y=y, y_pred=y_pred, threshold=threshold, axis=(2, 3))
+            y_plt_mean = np.mean(y_csi, axis=(0))
+            y_plt_std = np.std(y_csi, axis=(0))
+
+            y_gfs_csi = csi(y=y,
+                            y_pred=y_gfs,
+                            threshold=threshold,
+                            axis=(2, 3))
+            y_gfs_plt_mean = np.mean(y_gfs_csi, axis=(0))
+            y_gfs_plt_std = np.std(y_gfs_csi, axis=(0))
+
+            y_persist_csi = csi(y=y,
+                                y_pred=y_pred,
+                                threshold=threshold,
+                                axis=(2, 3))
+            y_persist_plt_mean = np.mean(y_persist_csi, axis=(0))
+            y_persist_plt_std = np.std(y_persist_csi, axis=(0))
+
+            x_plt = np.arange(y_csi.shape[0])
+            fig, ax = plt.subplots(1, figsize=(10, 5))
+
+            ax.errorbar(x_plt,
+                        y_plt_mean,
+                        y_plt_std,
+                        label="Our model",
+                        marker="s",
+                        c=CB_color_cycle[0])
+
+            ax.errorbar(x_plt,
+                        y_gfs_plt_mean,
+                        y_gfs_plt_std,
+                        label="GFS",
+                        marker="s",
+                        c=CB_color_cycle[1])
+
+            ax.errorbar(x_plt,
+                        y_persist_plt_mean,
+                        y_persist_plt_std,
+                        label="Persistence",
+                        marker="s",
+                        c=CB_color_cycle[2])
+
+            ax.set_title(
+                f"Mean Critical Success Index by Lead Time at {threshold} mm/hr ({split})"
+            )
+            ax.set_xlabel("Lead Time")
+            ax.set_ylabel("CSI")
+            ax.legend()
+
+            fig.savefig(
+                f"{results_dir}/{split}/csi/{split}_mean_csi_by_lead_time_{threshold}.png",
+                bbox_inches="tight")
+
+    with open(f"{results_dir}/metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
