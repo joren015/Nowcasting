@@ -170,12 +170,13 @@ if __name__ == "__main__":
 
             os.makedirs("data/tmp", exist_ok=True)
             with tempfile.TemporaryDirectory(dir="data/tmp") as tmpdirname:
-                model_analysis(
+                metrics = model_analysis(
                     model,
                     results_dir=tmpdirname,
                     dataset_directory=f"data/datasets/{args.dataset_directory}"
                 )
                 mlflow.log_artifacts(tmpdirname, "analysis")
+                mlflow.log_metrics(metrics)
 
         except Exception as e:
             print(e)

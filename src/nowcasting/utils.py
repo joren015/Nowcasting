@@ -437,7 +437,6 @@ def model_analysis(model, results_dir: str, dataset_directory: str):
         y_gfs = np.array(gfss)
         y_persist = np.array(y_persists)
 
-        metrics[split] = {}
         predictions = {
             "y": y,
             "y_pred": y_pred,
@@ -691,7 +690,7 @@ def model_analysis(model, results_dir: str, dataset_directory: str):
             y_persist_plt_mean = np.mean(y_persist_csi, axis=(0))
             y_persist_plt_std = np.std(y_persist_csi, axis=(0))
 
-            x_plt = np.arange(y_csi.shape[0])
+            x_plt = np.arange(y_plt_mean.shape[0])
             fig, ax = plt.subplots(1, figsize=(10, 5))
 
             ax.errorbar(x_plt,
