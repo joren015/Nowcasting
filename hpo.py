@@ -14,6 +14,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
+from nowcasting.unet_conv3d import unet_conv3d
 from nowcasting.utils import CustomGenerator, KGLoss, model_analysis
 
 seed = 42
@@ -28,8 +29,8 @@ def objective(trial):
     dropout_rate = trial.suggest_float("dropout_rate", 0.1, 0.75, step=0.05)
     learning_rate = trial.suggest_float("learning_rate", 1e-10, 1e-1, log=True)
     batch_size = trial.suggest_int("batch_size", 4, 8, step=4)
-    kgl_alpha = trial.suggest_float("kgl_alpha", 0.0, 1.0, step=0.25)
-    kgl_beta = trial.suggest_float("kgl_beta", 0.0, 1.0, step=0.25)
+    # kgl_alpha = trial.suggest_float("kgl_alpha", 0.0, 1.0, step=0.25)
+    # kgl_beta = trial.suggest_float("kgl_beta", 0.0, 1.0, step=0.25)
 
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
@@ -56,20 +57,21 @@ def objective(trial):
                 "hpo_dropout_rate": dropout_rate,
                 "hpo_learning_rate": learning_rate,
                 "hpo_batch_size": batch_size,
-                "hpo_kgl_alpha": kgl_alpha,
-                "hpo_kgl_beta": kgl_beta
+                # "hpo_kgl_alpha": kgl_alpha,
+                # "hpo_kgl_beta": kgl_beta
             }
             print(params)
             mlflow.log_params(params)
         except Exception as e:
             print(e)
 
-        model = res2((12, 256, 620, 4),
-                     num_filters_base=num_filters_base,
-                     dropout_rate=dropout_rate)
+        model = unet_conv3d((12, 256, 620, 4),
+                            num_filters_base=num_filters_base,
+                            dropout_rate=dropout_rate)
         model.summary()
 
-        loss = KGLoss(alpha=kgl_alpha, beta=kgl_beta)
+        # loss = KGLoss(alpha=kgl_alpha, beta=kgl_beta)
+        loss = "mean_squared_error"
 
         model.compile(
             loss=loss,
@@ -136,8 +138,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--experiment_prefix",
         type=str,
-        default="hpo_res_kgl",
-        help="Prefix used to identify mlflow experiment, by default hpo_res_kgl"
+        default="hpo_unet_conv3d",
+        help=
+        "Prefix used to identify mlflow experiment, by default hpo_unet_conv3d"
     )
 
     args = parser.parse_args()
@@ -166,8 +169,8 @@ if __name__ == "__main__":
         "dropout_rate": [0, 0.25, 0.5],
         "learning_rate": [1e-4, 1e-2, 1e-1],
         "batch_size": [4, 8],
-        "kgl_alpha": [0.0, 0.25, 0.5, 0.75, 1.0],
-        "kgl_beta": [0.0, 0.25, 0.5, 0.75, 1.0]
+        # "kgl_alpha": [0.0, 0.25, 0.5, 0.75, 1.0],
+        # "kgl_beta": [0.0, 0.25, 0.5, 0.75, 1.0]
     }
 
     study = optuna.create_study(
