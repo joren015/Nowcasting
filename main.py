@@ -10,7 +10,7 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras import mixed_precision
 
 from nowcasting.unet import res2
-from nowcasting.utils import CustomGenerator, KGMeanSquaredError
+from nowcasting.utils import CustomGenerator, KGLoss
 
 seed = 42
 random.seed(seed)
@@ -37,37 +37,38 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dropout_rate",
         type=float,
-        default=0.5,
-        help="Dropout rate used throughout model. By default 0.5")
+        default=0,
+        help="Dropout rate used throughout model. By default 0")
     parser.add_argument("--learning_rate",
                         type=float,
-                        default=1e-6,
-                        help="Starting learning rate. By default 1e-6")
+                        default=1e-4,
+                        help="Starting learning rate. By default 1e-4")
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=8,
-        help="Batch size used when training/evaluating. By default 8")
+        default=4,
+        help="Batch size used when training/evaluating. By default 4")
     parser.add_argument(
         "--experiment_prefix",
         type=str,
-        default="res2.0.1",
-        help="Prefix used to identify mlflow experiment, by default res2.0.1")
+        default="res2_kgl",
+        help="Prefix used to identify mlflow experiment, by default res2_kgl")
     parser.add_argument("--early_stopping",
                         type=bool,
                         default=False,
                         help="Option to use early stopping, by default True")
     parser.add_argument(
-        "--loss_fn",
-        type=str,
-        default="kgmse",
-        help="Which loss function to use when training, by default kgmse")
-    parser.add_argument(
-        "--kgmse_alpha",
+        "--kgl_alpha",
         type=float,
-        default=0.1,
+        default=0.0,
         help=
-        "Weight apply to kgmse error (only applicable when using loss_fn kgmse), by default 0.1"
+        "Weight apply to knowledge guided loss (negative values error), by default 0.0"
+    )
+    parser.add_argument(
+        "--kgl_beta",
+        type=float,
+        default=1.0,
+        help="Weight apply to knowledge guided loss (csi error), by default 1.0"
     )
 
     args = parser.parse_args()
@@ -93,7 +94,6 @@ if __name__ == "__main__":
     # Creating train/test/val datasets
     train_directory = f"data/datasets/{args.dataset_directory}/train"
     val_directory = f"data/datasets/{args.dataset_directory}/val"
-    # test_directory = f"data/datasets/{args.dataset_directory}/test"
 
     train_paths = [
         f"{train_directory}/{x}" for x in os.listdir(train_directory)
@@ -111,61 +111,48 @@ if __name__ == "__main__":
         mlflow.create_experiment(study_experiment)
         experiment = mlflow.get_experiment_by_name(study_experiment)
 
-    # Setting mlflow to autolog tensorflow parameters and metrics
     mlflow.tensorflow.autolog(log_models=False)
 
-    # Starting mlflow run
     with mlflow.start_run(experiment_id=experiment.experiment_id) as run:
-        # Logging manually selected parameters
         try:
             params = {
                 "hpo_num_filters_base": args.num_filters_base,
                 "hpo_dropout_rate": args.dropout_rate,
                 "hpo_learning_rate": args.learning_rate,
                 "hpo_batch_size": args.batch_size,
-                "hpo_loss_fn": args.loss_fn,
-                "hpo_kgmse_alpha": args.kgmse_alpha
+                "hpo_kgl_alpha": args.kgl_alpha,
+                "hpo_kgl_beta": args.kgl_beta
             }
             print(params)
             mlflow.log_params(params)
         except Exception as e:
             print(e)
 
-        # Instantiating res2 model
         model = res2((12, 256, 620, 4),
                      num_filters_base=args.num_filters_base,
                      dropout_rate=args.dropout_rate)
         model.summary()
 
-        # Selecting loss function based on passed argument loss_fn
-        loss = "mean_squared_error"
-        if args.loss_fn == "kgmse":
-            loss = KGMeanSquaredError(alpha=args.kgmse_alpha)
+        loss = KGLoss(alpha=args.kgl_alpha, beta=args.kgl_beta)
 
         model.compile(
             loss=loss,
             optimizer=keras.optimizers.Adam(learning_rate=args.learning_rate),
             metrics=["mae", "mse"])
 
-        # Setting checkpoint directory for best weights
         checkpoint_directory = f"data/checkpoints/{run.info.run_id}"
         os.makedirs(checkpoint_directory)
         checkpoint_filepath = f"{checkpoint_directory}/script_n1.h5"
-
-        # Creating list of callbacks to use during training
         callbacks = [
-            ReduceLROnPlateau(factor=0.1, patience=5, min_lr=1e-16, verbose=1),
+            EarlyStopping(patience=25, verbose=1),
+            ReduceLROnPlateau(factor=0.1, patience=10, min_lr=1e-16,
+                              verbose=1),
             ModelCheckpoint(filepath=checkpoint_filepath,
                             verbose=1,
                             save_best_only=True,
                             save_weights_only=True)
         ]
 
-        # Adding early stopping callback based on passed argument early_stopping
-        if args.early_stopping:
-            callbacks.append(EarlyStopping(patience=20, verbose=1), )
-
-        # Fitting model
         try:
             print("Starting fit")
             results = model.fit(train_dataset,
@@ -175,12 +162,10 @@ if __name__ == "__main__":
                                 verbose=1,
                                 validation_data=val_dataset)
 
-            print(results)
             val_loss = np.min(results.history["val_loss"])
-            print(f"Min val loss: {val_loss}")
 
-            # Reloading best weights and saving model to mlflow
             model.load_weights(checkpoint_filepath)
             mlflow.log_artifact(checkpoint_filepath)
+
         except Exception as e:
             print(e)
