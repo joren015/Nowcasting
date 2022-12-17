@@ -684,7 +684,7 @@ def model_analysis(model, results_dir: str, dataset_directory: str):
             y_gfs_plt_std = np.std(y_gfs_csi, axis=(0))
 
             y_persist_csi = csi(y=y,
-                                y_pred=y_pred,
+                                y_pred=y_persist,
                                 threshold=threshold,
                                 axis=(2, 3))
             y_persist_plt_mean = np.mean(y_persist_csi, axis=(0))
