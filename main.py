@@ -158,7 +158,7 @@ if __name__ == "__main__":
             print("Starting fit")
             results = model.fit(train_dataset,
                                 batch_size=args.batch_size,
-                                epochs=128,
+                                epochs=1,
                                 callbacks=callbacks,
                                 verbose=1,
                                 validation_data=val_dataset)
@@ -179,4 +179,4 @@ if __name__ == "__main__":
                 mlflow.log_metrics(metrics)
 
         except Exception as e:
-            print(e)
+            raise e

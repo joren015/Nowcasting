@@ -727,3 +727,5 @@ def model_analysis(model, results_dir: str, dataset_directory: str):
 
     with open(f"{results_dir}/metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
+
+    return metrics
