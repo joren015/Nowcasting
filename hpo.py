@@ -32,8 +32,8 @@ def objective(trial):
     # kgl_alpha = trial.suggest_float("kgl_alpha", 0.0, 1.0, step=0.25)
     # kgl_beta = trial.suggest_float("kgl_beta", 0.0, 1.0, step=0.25)
 
-    train_directory = f"data/datasets/{args.dataset_directory}/train"
-    val_directory = f"data/datasets/{args.dataset_directory}/val"
+    train_directory = f"{args.dataset_directory}/train"
+    val_directory = f"{args.dataset_directory}/val"
 
     train_paths = [
         f"{train_directory}/{x}" for x in os.listdir(train_directory)
@@ -43,10 +43,10 @@ def objective(trial):
     train_dataset = CustomGenerator(train_paths, batch_size)
     val_dataset = CustomGenerator(val_paths, batch_size)
 
-    experiment = mlflow.get_experiment_by_name(study_experiment)
+    experiment = mlflow.get_experiment_by_name(args.experiment_name)
     if experiment is None:
-        mlflow.create_experiment(study_experiment)
-        experiment = mlflow.get_experiment_by_name(study_experiment)
+        mlflow.create_experiment(args.experiment_name)
+        experiment = mlflow.get_experiment_by_name(args.experiment_name)
 
     mlflow.tensorflow.autolog(log_models=False)
 
@@ -110,8 +110,7 @@ def objective(trial):
                 metrics = model_analysis(
                     model,
                     results_dir=tmpdirname,
-                    dataset_directory=f"data/datasets/{args.dataset_directory}"
-                )
+                    dataset_directory=args.dataset_directory)
                 mlflow.log_artifacts(tmpdirname, "analysis")
                 mlflow.log_metrics(metrics)
 
@@ -131,16 +130,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_directory",
         type=str,
-        default="12_8_0_20_1.0",
+        default="data/datasets/12_8_0_20_1.0",
         help=
-        "Subdirectory in data/datasets to use for training, testing, and validation. By default 12_8_0_20_1.0"
+        "Path where training, testing, and validation dataset are stored. By default data/datasets/12_8_0_20_1.0"
     )
     parser.add_argument(
-        "--experiment_prefix",
+        "--experiment_name",
         type=str,
-        default="hpo_unet_conv3d",
+        default="hpo_unet_conv3d_12_8_0_20_1.0",
         help=
-        "Prefix used to identify mlflow experiment, by default hpo_unet_conv3d"
+        "Named used for mlflow experiment, by default hpo_unet_conv3d_12_8_0_20_1.0"
     )
 
     args = parser.parse_args()
@@ -159,7 +158,6 @@ if __name__ == "__main__":
 
     print(tf.config.list_physical_devices("GPU"))
 
-    study_experiment = f"{args.experiment_prefix}_{args.dataset_directory}"
     storage = optuna.storages.RDBStorage(url="sqlite:///optuna.db",
                                          heartbeat_interval=60,
                                          grace_period=120)
@@ -174,7 +172,7 @@ if __name__ == "__main__":
     }
 
     study = optuna.create_study(
-        study_name=study_experiment,
+        study_name=args.experiment_name,
         storage=storage,
         sampler=optuna.samplers.GridSampler(search_space),
         direction="minimize",
